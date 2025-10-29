@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "1016671928495",
+    "project_id": "bref-news",
+    "storage_bucket": "bref-news.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1016671928495:android:2075a3d4ddc68c6b71145a",
+        "android_client_info": {
+          "package_name": "com.nandak.brefnews"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1016671928495-ou4jc127ee5u2sphtpminh4058hh5v2m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nandak.brefnews",
+            "certificate_hash": "40a36fa21c0a7d07206728f4281cf015a5354603"
+          }
+        },
+        {
+          "client_id": "1016671928495-sn4anrm36n7de94h9eelf69gl066nqpk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDM1ng5fSC5WZOlH1YvfP3tAfY_388ELB0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1016671928495-sn4anrm36n7de94h9eelf69gl066nqpk.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1016671928495-hvm538ksqe6cb9vdvk6mkd4qas0do9ur.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.nandak.brefnews"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

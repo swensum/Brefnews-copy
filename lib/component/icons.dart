@@ -1,0 +1,125 @@
+// topic_icons.dart
+import 'package:flutter/material.dart';
+
+class TopicIcons {
+  
+  static final Map<String, IconData> topicIconMap = {
+    'Sports': Icons.sports_baseball,
+    'Technology': Icons.computer,
+    'Politics': Icons.policy,
+    'Entertainment': Icons.movie,
+    'Business': Icons.business,
+    'Health': Icons.health_and_safety,
+    'Science': Icons.science,
+    'Education': Icons.school,
+    'Travel': Icons.travel_explore,
+    'Food': Icons.restaurant,
+    'Fashion': Icons.style,
+    'Art': Icons.palette,
+    'Music': Icons.music_note,
+    'Gaming': Icons.sports_esports,
+    'Finance': Icons.attach_money,
+    'Environment': Icons.eco,
+    'Automotive': Icons.directions_car,
+    'Real Estate': Icons.home,
+    'Weather': Icons.wb_sunny,
+    'Space': Icons.rocket_launch,
+    'Animals': Icons.pets,
+    'History': Icons.history,
+    'Culture': Icons.language,
+    'Photography': Icons.camera_alt,
+    'Books': Icons.menu_book,
+    'Fitness': Icons.fitness_center,
+    'Yoga': Icons.self_improvement,
+    'Meditation': Icons.psychology,
+    'Cooking': Icons.restaurant_menu,
+    'Gardening': Icons.local_florist,
+    'DIY': Icons.build,
+    'Tech News': Icons.newspaper,
+    'AI': Icons.smart_toy,
+    'Programming': Icons.code,
+    'Mobile': Icons.phone_iphone,
+    'Web Development': Icons.web,
+    'Startups': Icons.trending_up,
+    'Cryptocurrency': Icons.currency_bitcoin,
+    'Stock Market': Icons.show_chart,
+    'Economy': Icons.analytics,
+    'World News': Icons.public,
+    'Local News': Icons.location_city,
+    'Breaking News': Icons.notifications_active,
+    'Opinion': Icons.forum,
+    'Analysis': Icons.analytics,
+    'Interview': Icons.mic,
+    'Review': Icons.star,
+    'Tutorial': Icons.play_circle_fill,
+    'India': Icons.flag,
+    'Miscellaneous': Icons.more_horiz,
+    'Cricket': Icons.sports_cricket,
+  };
+
+  static final Map<String, Color> topicColorMap = {
+    'Sports': Colors.orange,
+    'Technology': Colors.blue,
+    'Politics': Colors.red,
+    'Entertainment': Colors.purple,
+    'Business': Colors.green,
+    'Health': Colors.pink,
+    'Science': Colors.teal,
+    'Education': Colors.indigo,
+    'Travel': Colors.cyan,
+    'Food': Colors.amber,
+    'Fashion': Colors.deepPurple,
+    'Art': Colors.brown,
+    'Music': Colors.deepOrange,
+    'Gaming': Colors.lightBlue,
+    'Finance': Colors.lightGreen,
+    'Environment': Colors.green,
+    'Automotive': Colors.blueGrey,
+    'Real Estate': Colors.orange,
+    'Weather': Colors.cyan,
+    'Space': Colors.purple,
+    'Animals': Colors.brown,
+    'History': Colors.amber,
+    'Culture': Colors.indigo,
+    'Photography': Colors.pink,
+    'Books': Colors.deepPurple,
+    'Fitness': Colors.red,
+    'Yoga': Colors.green,
+    'Meditation': Colors.teal,
+    'Cooking': Colors.orange,
+    'Gardening': Colors.lightGreen,
+    'DIY': Colors.blueGrey,
+    'Tech News': Colors.blue,
+    'AI': Colors.purple,
+    'Programming': Colors.blue,
+    'Mobile': Colors.cyan,
+    'Web Development': Colors.indigo,
+    'Startups': Colors.green,
+    'Cryptocurrency': Colors.amber,
+    'Stock Market': Colors.green,
+    'Economy': Colors.blue,
+    'World News': Colors.red,
+    'Local News': Colors.blue,
+    'Breaking News': Colors.red,
+    'Opinion': Colors.purple,
+    'Analysis': Colors.teal,
+    'Interview': Colors.orange,
+    'Review': Colors.amber,
+    'Tutorial': Colors.blue,
+    'India': Color(0xFFFF9933), // Saffron color for India
+    'Miscellaneous': Colors.grey,
+    'Cricket': Colors.green,
+  };
+
+  static IconData getIconForTopic(String topicName) {
+    return topicIconMap[topicName] ?? Icons.topic;
+  }
+
+  static Color getColorForTopic(String topicName) {
+    return topicColorMap[topicName] ?? Colors.blue; // Default blue color
+  }
+
+  static bool hasIcon(String topicName) {
+    return topicIconMap.containsKey(topicName);
+  }
+}
