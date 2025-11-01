@@ -5,6 +5,9 @@ import '../auth/phone.dart';
 import '../component/bookmark.dart';
 import '../component/editprofile.dart';
 import '../component/feedback.dart';
+import '../component/feedbackdetail.dart';
+import '../component/headlinelist.dart';
+import '../component/headlines.dart';
 import '../component/notification.dart';
 import '../component/options.dart';
 import '../component/signin.dart';
@@ -75,6 +78,7 @@ class AppRouter {
               );
             },
           ),
+         
           GoRoute(
             path: '/search',
             pageBuilder: (context, state) {
@@ -119,8 +123,6 @@ class AppRouter {
           ),
         ],
       ),
-      
-      // All other routes with consistent sliding animation
       GoRoute(
         path: '/feedback',
         pageBuilder: (context, state) {
@@ -142,6 +144,16 @@ class AppRouter {
           );
         },
       ),
+       GoRoute(
+      path: '/feedback-detail',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+        return NewFeedbackPage(
+          onFeedbackSubmitted: extra?['onFeedbackSubmitted'],
+          newsHeadline: extra?['newsHeadline'] ?? '',
+        );
+      },
+    ),
       GoRoute(
         path: '/notification',
         pageBuilder: (context, state) {
@@ -410,6 +422,62 @@ GoRoute(
           );
         },
       ),
+     GoRoute(
+  path: '/headlines',
+  pageBuilder: (context, state) {
+    final extraData = state.extra as Map<String, dynamic>;
+    final headline = extraData['headline'] as Map<String, dynamic>; // Change 'topic' to 'headline'
+    final initialNews = extraData['initialNews'] as News?;
+    
+    return CustomTransitionPage(
+      key: state.pageKey,
+      child: HeadlinesDetailPage(
+        headline: headline, // Add the required headline parameter
+        initialNews: initialNews,
+      ),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1.0, 0.0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeInOut,
+          )),
+          child: child,
+        );
+      },
+    );
+  },
+),
+GoRoute(
+  path: '/headlines-listing',
+  pageBuilder: (context, state) {
+    final extraData = state.extra as Map<String, dynamic>;
+    final initialHeadline = extraData['initialHeadline'] as Map<String, dynamic>;
+    final allHeadlines = extraData['allHeadlines'] as List<Map<String, dynamic>>;
+    
+    return CustomTransitionPage(
+      key: state.pageKey,
+      child: HeadlinesListingPage(
+        initialHeadline: initialHeadline,
+        allHeadlines: allHeadlines,
+      ),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1.0, 0.0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeInOut,
+          )),
+          child: child,
+        );
+      },
+    );
+  },
+),
     ],
   );
 }

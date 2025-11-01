@@ -1,5 +1,4 @@
 import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -11,26 +10,35 @@ import '../models/news_model.dart';
 import '../utilities/share_utils.dart';
 
 
-class NotificationPage extends StatefulWidget {
+class HeadlinesDetailPage extends StatefulWidget {
+  final Map<String, dynamic> headline;
   final News? initialNews;
 
-  const NotificationPage({super.key, this.initialNews});
+  const HeadlinesDetailPage({
+    super.key, 
+    required this.headline,
+    this.initialNews,
+  });
 
   @override
-  State<NotificationPage> createState() => _NotificationPageState();
+  State<HeadlinesDetailPage> createState() => _HeadlinesDetailPageState();
 }
 
-class _NotificationPageState extends State<NotificationPage>
+class _HeadlinesDetailPageState extends State<HeadlinesDetailPage>
     with TickerProviderStateMixin {
   int _currentPage = 0;
   late AnimationController _slideController;
   late AnimationController _scaleController;
-  List<News> _sortedNotifications = [];
+  List<News> _headlineNews = [];
   bool _isInitialized = false;
+  late String _headlineText;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+
+    _headlineText = widget.headline['headline_text'] as String;
 
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 400),
@@ -43,30 +51,118 @@ class _NotificationPageState extends State<NotificationPage>
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _sortNotifications();
+      _loadHeadlineNews();
       _isInitialized = true;
     });
   }
 
-  void _sortNotifications() {
-    final newsProvider = Provider.of<NewsProvider>(context, listen: false);
-    final notifiedNews = List<News>.from(newsProvider.notifiedNews);
+  void _loadHeadlineNews() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+      
+      print('🟢 [HeadlinesDetail] Loading news for headline: "$_headlineText"');
 
+      // Method 1: Check if the headline already has news articles from SQL function
+      if (widget.headline.containsKey('news_articles') && 
+          widget.headline['news_articles'] is List) {
+        
+        final newsList = widget.headline['news_articles'] as List<News>;
+        if (newsList.isNotEmpty) {
+          print('🟢 [HeadlinesDetail] Found ${newsList.length} articles in headline data');
+          if (mounted) {
+            setState(() {
+              _headlineNews = newsList;
+              _sortNews();
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+      }
+
+      // Method 2: Fallback to client-side matching with better comparison
+      final relatedNews = newsProvider.allNews.where((news) {
+        if (news.headline == null) return false;
+        
+        final newsHeadlineText = news.headline!['headline']?.toString() ?? '';
+        final matches = _doesHeadlineMatch(newsHeadlineText, _headlineText);
+        
+        if (matches) {
+          print('   ✅ Matched: "$newsHeadlineText" with "$_headlineText"');
+        }
+        
+        return matches;
+      }).toList();
+      
+      print('🟢 [HeadlinesDetail] Fallback found ${relatedNews.length} articles');
+
+      if (mounted) {
+        setState(() {
+          _headlineNews = relatedNews;
+          _sortNews();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('🔴 [HeadlinesDetail] Error loading headline news: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _headlineNews = [];
+        });
+      }
+    }
+  }
+
+  bool _doesHeadlineMatch(String newsHeadline, String timelineHeadline) {
+    if (newsHeadline.isEmpty || timelineHeadline.isEmpty) return false;
+    
+    // Strategy 1: Exact case-insensitive match
+    if (newsHeadline.toLowerCase() == timelineHeadline.toLowerCase()) {
+      return true;
+    }
+    
+    // Strategy 2: Remove special characters and compare
+    final cleanNews = newsHeadline.replaceAll(RegExp(r'[^\w\s]'), '').toLowerCase().trim();
+    final cleanTimeline = timelineHeadline.replaceAll(RegExp(r'[^\w\s]'), '').toLowerCase().trim();
+    
+    if (cleanNews == cleanTimeline) {
+      return true;
+    }
+    
+    // Strategy 3: Check if one contains the other (for partial matches)
+    if (cleanNews.contains(cleanTimeline) || cleanTimeline.contains(cleanNews)) {
+      return true;
+    }
+    
+    // Strategy 4: Split into words and check for significant overlap
+    final newsWords = cleanNews.split(' ').where((word) => word.length > 3).toSet();
+    final timelineWords = cleanTimeline.split(' ').where((word) => word.length > 3).toSet();
+    
+    final intersection = newsWords.intersection(timelineWords);
+    if (intersection.isNotEmpty) {
+      print('   🔍 Partial match: $intersection');
+      return true;
+    }
+    
+    return false;
+  }
+
+  void _sortNews() {
     if (widget.initialNews != null) {
-      final clickedNewsIndex = notifiedNews.indexWhere(
+      final clickedNewsIndex = _headlineNews.indexWhere(
         (news) => news.id == widget.initialNews!.id,
       );
       if (clickedNewsIndex != -1) {
-        final clickedNews = notifiedNews.removeAt(clickedNewsIndex);
-        notifiedNews.insert(0, clickedNews);
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _sortedNotifications = notifiedNews;
+        final clickedNews = _headlineNews.removeAt(clickedNewsIndex);
+        _headlineNews.insert(0, clickedNews);
         _currentPage = 0;
-      });
+        print('🟢 [HeadlinesDetail] Sorted news, clicked article moved to top');
+      }
     }
   }
 
@@ -74,7 +170,7 @@ class _NotificationPageState extends State<NotificationPage>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_isInitialized) {
-      _sortNotifications();
+      _loadHeadlineNews();
     }
   }
 
@@ -89,7 +185,7 @@ class _NotificationPageState extends State<NotificationPage>
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final localizations = AppLocalizations.of(context)!;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -99,11 +195,11 @@ class _NotificationPageState extends State<NotificationPage>
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
-          localizations.notifications,
+          _headlineText,
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: screenWidth * 0.04,
+            fontSize: screenWidth * 0.045,
           ),
         ),
         centerTitle: false,
@@ -112,25 +208,23 @@ class _NotificationPageState extends State<NotificationPage>
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).padding.bottom + screenHeight * 0.01,
         ),
-        child: _buildNotificationContent(),
+        child: _buildHeadlineContent(),
       ),
     );
   }
 
-  Widget _buildNotificationContent() {
+  Widget _buildHeadlineContent() {
+    if (_isLoading) {
+      return _buildLoadingIndicator();
+    }
+
     return Consumer<NewsProvider>(
       builder: (context, newsProvider, child) {
-        if (_sortedNotifications.length != newsProvider.notifiedNews.length) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _sortNotifications();
-          });
-        }
-
-        if (_sortedNotifications.isEmpty) return _buildEmptyWidget();
-        if (_sortedNotifications.length == 1) {
-          return _buildSingleNotification(
+        if (_headlineNews.isEmpty) return _buildEmptyWidget();
+        if (_headlineNews.length == 1) {
+          return _buildSingleNews(
             newsProvider,
-            _sortedNotifications.first,
+            _headlineNews.first,
           );
         }
 
@@ -147,7 +241,7 @@ class _NotificationPageState extends State<NotificationPage>
               });
             }
           },
-          children: _sortedNotifications.asMap().entries.map((entry) {
+          children: _headlineNews.asMap().entries.map((entry) {
             final index = entry.key;
             final news = entry.value;
             final isActive = index == _currentPage;
@@ -159,12 +253,11 @@ class _NotificationPageState extends State<NotificationPage>
               child: AnimatedOpacity(
                 opacity: isActive ? 1.0 : 1.0,
                 duration: const Duration(milliseconds: 300),
-                child: _NotificationNewsCard(
+                child: _HeadlineNewsCard(
                   news: news,
                   isActive: isActive,
-                  isClickedNews:
-                      index == 0 &&
-                      widget.initialNews != null &&
+                  isClickedNews: widget.initialNews != null && 
+                      index == 0 && 
                       news.id == widget.initialNews!.id,
                 ),
               ),
@@ -175,14 +268,54 @@ class _NotificationPageState extends State<NotificationPage>
     );
   }
 
-  Widget _buildSingleNotification(NewsProvider newsProvider, News news) {
+  Widget _buildLoadingIndicator() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final localizations = AppLocalizations.of(context)!;
+    
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: screenWidth * 0.15,
+            height: screenWidth * 0.15,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              backgroundColor: Colors.grey[800],
+            ),
+          ),
+          SizedBox(height: screenHeight * 0.03),
+          Text(
+            'Loading $_headlineText news...',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: screenWidth * 0.04,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: screenHeight * 0.01),
+          Text(
+            localizations.pleaseWait,
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: screenWidth * 0.035,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSingleNews(NewsProvider newsProvider, News news) {
     return Center(
       child: Padding(
         padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.001),
-        child: _NotificationNewsCard(
+        child: _HeadlineNewsCard(
           news: news,
           isActive: true,
-          isClickedNews: true,
+          isClickedNews: widget.initialNews != null && news.id == widget.initialNews!.id,
         ),
       ),
     );
@@ -192,18 +325,19 @@ class _NotificationPageState extends State<NotificationPage>
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final localizations = AppLocalizations.of(context)!;
+    
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.notifications_none,
+            Icons.article,
             color: Theme.of(context).colorScheme.outlineVariant, 
             size: screenHeight * 0.1,
           ),
           SizedBox(height: screenHeight * 0.02),
           Text(
-            localizations.noNotifications,
+            localizations.noNewsAvailable,
             style: TextStyle(
               color: Theme.of(context).colorScheme.onPrimary, 
               fontSize: screenWidth * 0.05,
@@ -212,15 +346,22 @@ class _NotificationPageState extends State<NotificationPage>
           ),
           SizedBox(height: screenHeight * 0.01),
           Text(
-            localizations.youWillSeeNotificationsHere,
+            '${localizations.noArticlesFoundFor} "$_headlineText"',
             style: TextStyle(color: Theme.of(context).colorScheme.outlineVariant, fontSize: screenWidth * 0.04),
+          ),
+          SizedBox(height: screenHeight * 0.02),
+          Text(
+            'Debug: Headline text is "$_headlineText"',
+            style: TextStyle(color: Colors.grey, fontSize: screenWidth * 0.03),
           ),
         ],
       ),
     );
   }
-}
 
+
+  
+}
 class _AnimatedShareIcon extends StatefulWidget {
   final VoidCallback onTap;
   final double size;
@@ -259,7 +400,7 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
         padding: EdgeInsets.all(widget.size * 0.2),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: _isTapped ? Colors.blue.withValues(alpha:  0.2) : Colors.transparent,
+          color: _isTapped ? Colors.blue.withValues(alpha: 0.2) : Colors.transparent,
         ),
         child: AnimatedScale(
           duration: const Duration(milliseconds: 200),
@@ -268,25 +409,25 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
           child: Icon(
             Icons.share,
             size: widget.size,
-            color: _isTapped ?Theme.of(context).colorScheme.primary:Theme.of(context).colorScheme.onSecondaryFixed,
+            color: _isTapped ? Theme.of(context).colorScheme.primary:Theme.of(context).colorScheme.onSecondaryFixed,
           ),
         ),
       ),
     );
   }
 }
-
-class _NotificationNewsCard extends StatelessWidget {
+class _HeadlineNewsCard extends StatelessWidget {
   final News news;
   final bool isActive;
   final bool isClickedNews;
   final GlobalKey shareKey = GlobalKey();
 
-  _NotificationNewsCard({
+  _HeadlineNewsCard({
     required this.news,
     required this.isActive,
     required this.isClickedNews,
   });
+
   Future<void> _shareNewsCard(BuildContext context) async {
     await ShareUtils.shareNewsCard(
       globalKey: shareKey,
@@ -353,6 +494,7 @@ class _NotificationNewsCard extends StatelessWidget {
     final screenHeight = MediaQuery.of(context).size.height;
     final overlayState = Overlay.of(context);
     final localizations = AppLocalizations.of(context)!;
+    
     final overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
         bottom: screenHeight * 0.1,
@@ -383,10 +525,8 @@ class _NotificationNewsCard extends StatelessWidget {
       ),
     );
 
-    // Insert overlay
     overlayState.insert(overlayEntry);
 
-    // Remove overlay after 1 second
     Future.delayed(const Duration(milliseconds: 1000), () {
       overlayEntry.remove();
     });
@@ -401,34 +541,46 @@ class _NotificationNewsCard extends StatelessWidget {
   }
 
   Widget _buildThreeDotMenu(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final localizations = AppLocalizations.of(context)!;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-        ),
+  final screenWidth = MediaQuery.of(context).size.width;
+  final localizations = AppLocalizations.of(context)!;
+
+  return Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(16),
+        topRight: Radius.circular(16),
       ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Share Feedback on Short Option
-            ListTile(
-              leading: Icon(Icons.feedback, color: Colors.black87),
-              title: Text(
-                localizations.shareFeedbackOnShort,
-                style: TextStyle(
-                  fontSize: screenWidth * 0.04,
-                  color: Colors.black,
-                  fontWeight: FontWeight.w500,
-                ),
+    ),
+    child: SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Share Feedback on Short Option
+          ListTile(
+            leading: Icon(Icons.feedback, color: Colors.black87),
+            title: Text(
+              localizations.shareFeedbackOnShort,
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: screenWidth * 0.04,
+                fontWeight: FontWeight.w500,
               ),
-              onTap: () {
-                Navigator.pop(context);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              _shareFeedbackOnShort(context);
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+   void _shareFeedbackOnShort(BuildContext context) {
+  // Close the bottom sheet first using a post-frame callback
+  WidgetsBinding.instance.addPostFrameCallback((_) {
     // Then navigate to feedback page
     context.push('/feedback-detail', extra: {
       'newsHeadline': news.title,
@@ -438,13 +590,8 @@ class _NotificationNewsCard extends StatelessWidget {
       }
     });
   });
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -460,14 +607,10 @@ class _NotificationNewsCard extends StatelessWidget {
           color: Colors.transparent,
           child: Container(
             decoration: BoxDecoration(
-              color:  Theme.of(context).scaffoldBackgroundColor,
+              color: Theme.of(context).scaffoldBackgroundColor,
               borderRadius: BorderRadius.circular(16),
               boxShadow: const [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 8,
-                  spreadRadius: 2,
-                ),
+                BoxShadow(color: Colors.black12, blurRadius: 8, spreadRadius: 2),
               ],
             ),
             child: Column(
@@ -480,7 +623,6 @@ class _NotificationNewsCard extends StatelessWidget {
                     else
                       _buildPlaceholderImage(maxImageHeight, screenWidth),
 
-                    // Three Dots Menu Button - Top Right Corner
                     Positioned(
                       top: screenWidth * 0.02,
                       right: screenWidth * 0.02,
@@ -490,7 +632,7 @@ class _NotificationNewsCard extends StatelessWidget {
                           width: screenWidth * 0.08,
                           height: screenWidth * 0.08,
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha:  0.6),
+                            color: Colors.black.withValues(alpha: 0.6),
                             shape: BoxShape.circle,
                           ),
                           child: Row(
@@ -527,6 +669,7 @@ class _NotificationNewsCard extends StatelessWidget {
                         ),
                       ),
                     ),
+
                     Positioned(
                       bottom: -screenWidth * 0.039,
                       left: screenWidth * 0.01,
@@ -540,7 +683,7 @@ class _NotificationNewsCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(16),
                           child: Image.asset(
                             'assets/brefnews.png',
-                              color: Theme.of(context).colorScheme.onSurface,
+                            color: Theme.of(context).colorScheme.onSurface,
                             width: screenWidth * 0.25,
                             height: screenWidth * 0.08,
                             fit: BoxFit.cover,
@@ -549,7 +692,6 @@ class _NotificationNewsCard extends StatelessWidget {
                       ),
                     ),
 
-                    // Action Buttons
                     Positioned(
                       bottom: -screenWidth * 0.03,
                       right: 0,
@@ -567,27 +709,21 @@ class _NotificationNewsCard extends StatelessWidget {
                           children: [
                             Consumer<NewsProvider>(
                               builder: (context, newsProvider, child) {
-                                bool isBookmarked = newsProvider.isBookmarked(
-                                  news,
-                                );
+                                bool isBookmarked = newsProvider.isBookmarked(news);
                                 return GestureDetector(
                                   onTap: () {
                                     newsProvider.toggleBookmark(news);
                                     _showBookmarkDialog(context, !isBookmarked);
                                   },
                                   child: Icon(
-                                    isBookmarked
-                                        ? Icons.bookmark
-                                        : Icons.bookmark_border,
+                                    isBookmarked ? Icons.bookmark : Icons.bookmark_border,
                                     size: screenWidth * 0.045,
-                                    color: isBookmarked
-                                        ? Theme.of(context).colorScheme.primary
+                                    color: isBookmarked ? Theme.of(context).colorScheme.primary
                                         : Theme.of(context).colorScheme.onSecondaryFixed,
                                   ),
                                 );
                               },
                             ),
-
                             SizedBox(width: screenWidth * 0.02),
                             _AnimatedShareIcon(
                               onTap: () => _shareNewsCard(context),
@@ -600,7 +736,6 @@ class _NotificationNewsCard extends StatelessWidget {
                   ],
                 ),
 
-                // Content Section
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(
@@ -612,7 +747,6 @@ class _NotificationNewsCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Title
                         Text(
                           news.title,
                           style: TextStyle(
@@ -632,7 +766,6 @@ class _NotificationNewsCard extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Summary Text
                                 Text(
                                   news.summary,
                                   style: TextStyle(
@@ -643,7 +776,6 @@ class _NotificationNewsCard extends StatelessWidget {
                                 ),
                                 SizedBox(height: screenHeight * 0.015),
 
-                                // Source and Time Info
                                 Container(
                                   padding: EdgeInsets.symmetric(
                                     vertical: screenHeight * 0.008,
@@ -651,7 +783,6 @@ class _NotificationNewsCard extends StatelessWidget {
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.start,
                                     children: [
-                                      // Source
                                       Flexible(
                                         child: Text(
                                           news.source,
@@ -667,7 +798,6 @@ class _NotificationNewsCard extends StatelessWidget {
 
                                       SizedBox(width: screenWidth * 0.02),
 
-                                      // Dot separator
                                       Container(
                                         width: screenWidth * 0.01,
                                         height: screenWidth * 0.01,
@@ -678,7 +808,6 @@ class _NotificationNewsCard extends StatelessWidget {
                                       ),
                                       SizedBox(width: screenWidth * 0.02),
 
-                                      // Time - don't expand, just take needed space
                                       Text(
                                         news.timeAgo,
                                         style: TextStyle(
@@ -699,7 +828,7 @@ class _NotificationNewsCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Headline section - takes full width
+
                 GestureDetector(
                   onTap: () => _launchUrl(context),
                   child: Container(
@@ -715,7 +844,7 @@ class _NotificationNewsCard extends StatelessWidget {
                               image: NetworkImage(news.imageUrl!),
                               fit: BoxFit.cover,
                               colorFilter: ColorFilter.mode(
-                                Colors.black.withValues(alpha:  0.6),
+                                Colors.black.withValues(alpha: 0.6),
                                 BlendMode.darken,
                               ),
                             )
@@ -742,8 +871,8 @@ class _NotificationNewsCard extends StatelessWidget {
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                               colors: [
-                                Colors.black.withValues(alpha:  0.0),
-                                Colors.black.withValues(alpha:  0.35),
+                                Colors.black.withValues(alpha: 0.0),
+                                Colors.black.withValues(alpha: 0.35),
                               ],
                             ),
                           ),
@@ -843,7 +972,6 @@ class _NotificationNewsCard extends StatelessWidget {
     );
   }
 }
-
 class _ImagePreviewDialog extends StatelessWidget {
   final News news;
 
@@ -953,7 +1081,7 @@ class _ImagePreviewDialog extends StatelessWidget {
                   ),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.left,
+                   textAlign: TextAlign.left,
                 ),
               ),
             ),

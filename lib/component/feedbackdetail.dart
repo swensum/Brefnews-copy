@@ -1,19 +1,20 @@
 import 'dart:io';
-
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../language/app_localizations.dart';
 
 class NewFeedbackPage extends StatefulWidget {
   final Function(String, String, String) onFeedbackSubmitted;
-  final String? newsHeadline; // Add this parameter
+  final String? newsHeadline;
 
   const NewFeedbackPage({
-    super.key, 
+    super.key,
     required this.onFeedbackSubmitted,
-    this.newsHeadline, // Make it optional
+    this.newsHeadline,
   });
 
   @override
@@ -22,11 +23,11 @@ class NewFeedbackPage extends StatefulWidget {
 
 class _NewFeedbackPageState extends State<NewFeedbackPage> {
   final TextEditingController _feedbackController = TextEditingController();
-  final TextEditingController _headlineController = TextEditingController(); 
+  final TextEditingController _headlineController = TextEditingController();
   String? _selectedFeedbackType;
   final List<PlatformFile> _selectedFiles = [];
   late List<String> _feedbackTypes;
-  
+
   // Validation error states
   String? _feedbackTypeError;
   String? _feedbackTextError;
@@ -36,22 +37,16 @@ class _NewFeedbackPageState extends State<NewFeedbackPage> {
     super.initState();
     if (widget.newsHeadline != null && widget.newsHeadline!.isNotEmpty) {
       _headlineController.text = widget.newsHeadline!;
-      _feedbackTypes = [
-      'Content related issue',
-      'Suggestion', 
-      'Technical Glitch',
-      'General',
-      'Others',
-    ];
     }
   }
-   @override
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Now it's safe to access context and localizations
     _initializeFeedbackTypes();
   }
-   void _initializeFeedbackTypes() {
+
+  void _initializeFeedbackTypes() {
     final localizations = AppLocalizations.of(context);
     if (localizations != null) {
       _feedbackTypes = [
@@ -61,9 +56,16 @@ class _NewFeedbackPageState extends State<NewFeedbackPage> {
         localizations.general,
         localizations.others,
       ];
+    } else {
+      _feedbackTypes = [
+        'Content related issue',
+        'Suggestion',
+        'Technical Glitch',
+        'General',
+        'Others',
+      ];
     }
-   }
-  
+  }
 
   Future<void> _pickFile() async {
     try {
@@ -72,7 +74,7 @@ class _NewFeedbackPageState extends State<NewFeedbackPage> {
         allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'doc'],
         allowMultiple: true,
       );
-      
+
       if (result != null && result.files.isNotEmpty) {
         setState(() {
           _selectedFiles.addAll(result.files);
@@ -97,7 +99,7 @@ class _NewFeedbackPageState extends State<NewFeedbackPage> {
   void _showFeedbackTypeBottomSheet() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
- final localizations = AppLocalizations.of(context)!;
+    final localizations = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -139,9 +141,9 @@ class _NewFeedbackPageState extends State<NewFeedbackPage> {
                         height: screenWidth * 0.06,
                         alignment: Alignment.center,
                         child: Icon(
-                          Icons.cancel, 
-                          color: Colors.white, 
-                          size: screenWidth * 0.045
+                          Icons.cancel,
+                          color: Colors.white,
+                          size: screenWidth * 0.045,
                         ),
                       ),
                     ),
@@ -166,8 +168,9 @@ class _NewFeedbackPageState extends State<NewFeedbackPage> {
                         color: _selectedFeedbackType == type
                             ? Colors.blue
                             : Colors.grey[300]!,
-                        width: _selectedFeedbackType == type ? 
-                            screenWidth * 0.005 : screenWidth * 0.003,
+                        width: _selectedFeedbackType == type
+                            ? screenWidth * 0.005
+                            : screenWidth * 0.003,
                       ),
                     ),
                     child: ListTile(
@@ -201,150 +204,201 @@ class _NewFeedbackPageState extends State<NewFeedbackPage> {
     );
   }
 
-  void _submitFeedback() async {
-     final localizations = AppLocalizations.of(context)!;
-    // Reset previous errors
-    setState(() {
-      _feedbackTypeError = null;
-      _feedbackTextError = null;
-    });
-
-    // Validate feedback type
-    if (_selectedFeedbackType == null) {
-      setState(() {
-        _feedbackTypeError = localizations.pleaseSelectFeedbackType;
-      });
-      return;
-    }
-
-    // Validate feedback text
-    if (_feedbackController.text.trim().isEmpty) {
-      setState(() {
-        _feedbackTextError = localizations.pleaseEnterFeedback;
-      });
-      return;
-    }
-
+  // Save feedback to SharedPreferences
+  Future<void> _saveFeedbackToLocal(Map<String, dynamic> feedbackData) async {
     try {
-      String? fileUrl;
-
-      // Step 1: Upload the file to Supabase Storage if one exists
-      if (_selectedFiles.isNotEmpty && _selectedFiles.first.path != null) {
-        final file = _selectedFiles.first;
-        
-        // Generate a unique file name to avoid conflicts
-        final fileName = 'feedback_${DateTime.now().millisecondsSinceEpoch}.${file.extension}';
-        
-        // Upload file to Supabase Storage
-        await Supabase.instance.client.storage
-            .from('feedback')
-            .upload(fileName, File(file.path!));
-        
-        // Get the public URL for the uploaded file
-        fileUrl = Supabase.instance.client.storage
-            .from('feedback')
-            .getPublicUrl(fileName);
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Get existing feedback list
+      final String? existingFeedbacksJson = prefs.getString('user_feedbacks');
+      List<Map<String, dynamic>> feedbacksList = [];
+      
+      if (existingFeedbacksJson != null && existingFeedbacksJson.isNotEmpty) {
+        try {
+          final List<dynamic> parsedList = json.decode(existingFeedbacksJson);
+          feedbacksList = parsedList.map((item) => Map<String, dynamic>.from(item)).toList();
+        } catch (e) {
+          print('Error parsing existing feedbacks: $e');
+        }
       }
+      
+      // Add new feedback
+      feedbacksList.add(feedbackData);
+      
+      // Save back to SharedPreferences as JSON string
+      await prefs.setString('user_feedbacks', json.encode(feedbacksList));
+      
+      print('Feedback saved locally: ${feedbackData['uuid']}');
+    } catch (e) {
+      print('Error saving feedback locally: $e');
+    }
+  }
 
-      // Step 2: Save feedback data to the database
-      final feedbackData = {
+  void _submitFeedback() async {
+  final localizations = AppLocalizations.of(context)!;
+  // Reset previous errors
+  setState(() {
+    _feedbackTypeError = null;
+    _feedbackTextError = null;
+  });
+
+  // Validate feedback type
+  if (_selectedFeedbackType == null) {
+    setState(() {
+      _feedbackTypeError = localizations.pleaseSelectFeedbackType;
+    });
+    return;
+  }
+
+  // Validate feedback text
+  if (_feedbackController.text.trim().isEmpty) {
+    setState(() {
+      _feedbackTextError = localizations.pleaseEnterFeedback;
+    });
+    return;
+  }
+
+  try {
+    String? fileUrl;
+
+    // Step 1: Upload the file to Supabase Storage if one exists
+    if (_selectedFiles.isNotEmpty && _selectedFiles.first.path != null) {
+      final file = _selectedFiles.first;
+
+      // Generate a unique file name to avoid conflicts
+      final fileName =
+          'feedback_${DateTime.now().millisecondsSinceEpoch}.${file.extension}';
+
+      // Upload file to Supabase Storage
+      await Supabase.instance.client.storage
+          .from('feedback')
+          .upload(fileName, File(file.path!));
+
+      // Get the public URL for the uploaded file
+      fileUrl = Supabase.instance.client.storage
+          .from('feedback')
+          .getPublicUrl(fileName);
+    }
+
+    final now = DateTime.now();
+
+    // Step 2: Prepare feedback data for local storage first
+    final localUuid = 'local_${DateTime.now().millisecondsSinceEpoch}';
+    final localFeedbackData = {
+      'uuid': localUuid,
+      'feedback_type': _selectedFeedbackType,
+      'feedback_text': _feedbackController.text.trim(),
+      'headline': _headlineController.text.trim(),
+      'attached_file_url': fileUrl,
+      'created_at': now.toIso8601String(),
+    };
+
+    // Step 3: Save to Supabase (for admin/all users) - WITHOUT UUID
+    try {
+      final supabaseFeedbackData = {
         'feedback_type': _selectedFeedbackType,
         'feedback_text': _feedbackController.text.trim(),
-        'headline': _headlineController.text.trim(), // Include headline in submission
+        'headline': _headlineController.text.trim(),
         'attached_file_url': fileUrl,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': now.toIso8601String(),
       };
 
-      // Insert into database
       final response = await Supabase.instance.client
           .from('feedback')
-          .insert(feedbackData)
+          .insert(supabaseFeedbackData)
           .select();
 
       print('Database insert response: $response');
-
-      // Handle the response - check if UUID exists, otherwise use id
+      
+      // Update local data with server UUID if available
       final insertedData = response[0];
-      final insertedUuid = insertedData['uuid'] as String? ?? insertedData['id']?.toString();
+      final serverUuid = insertedData['uuid'] as String? ?? insertedData['id']?.toString();
+      if (serverUuid != null) {
+        localFeedbackData['uuid'] = serverUuid;
+        print('Updated with server UUID: $serverUuid');
+      }
+    } catch (supabaseError) {
+      print('Supabase insert failed (continuing with local storage): $supabaseError');
+      // Continue with local storage even if Supabase fails
+    }
 
-      print('Inserted UUID/ID: $insertedUuid');
-if (!mounted) return;
-      final screenWidth = MediaQuery.of(context).size.width;
-      if (!mounted) return;
-      await showDialog(
-        
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(screenWidth * 0.04),
-            ),
-            title: Row(
-              children: [
-                Icon(
-                  Icons.check_circle,
-                  color: Colors.green,
-                  size: screenWidth * 0.06,
-                ),
-                SizedBox(width: screenWidth * 0.02),
-                Text(
-                 localizations.thankYou,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                    fontSize: screenWidth * 0.045,
-                  ),
-                ),
-              ],
-            ),
-            content: Text(
-              localizations.feedbackSuccess,
-              style: TextStyle(
-                fontSize: screenWidth * 0.04,
-                color: Colors.black54,
+    // Step 4: Save to local SharedPreferences (for user's view)
+    await _saveFeedbackToLocal(localFeedbackData);
+
+    // Show success dialog
+    if (!mounted) return;
+    
+    final screenWidth = MediaQuery.of(context).size.width;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(screenWidth * 0.04),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: screenWidth * 0.06,
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-                child: Text(
-                  localizations.ok,
-                  style: TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.w600,
-                    fontSize: screenWidth * 0.04,
-                  ),
+              SizedBox(width: screenWidth * 0.02),
+              Text(
+                localizations.thankYou,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                  fontSize: screenWidth * 0.045,
                 ),
               ),
             ],
-          );
-        },
-      );
+          ),
+          content: Text(
+            localizations.feedbackSuccess,
+            style: TextStyle(
+              fontSize: screenWidth * 0.04,
+              color: Colors.black54,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text(
+                localizations.ok,
+                style: TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.w600,
+                  fontSize: screenWidth * 0.04,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
 
-      // Return to FeedbackPage
-      if (mounted) {
-        Navigator.of(context).pop({
-          'success': true,
-        });
-      }
-      
-    } catch (error) {
-      print('Error submitting feedback: $error');
-      setState(() {
-        _feedbackTextError = 'Failed to submit feedback. Please try again.';
-      });
+    // Return to FeedbackPage
+    if (mounted) {
+      Navigator.of(context).pop({'success': true});
     }
+  } catch (error) {
+    print('Error submitting feedback: $error');
+    setState(() {
+      _feedbackTextError = 'Failed to submit feedback. Please try again.';
+    });
   }
+}
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
- final localizations = AppLocalizations.of(context)!;
+    final localizations = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -352,16 +406,16 @@ if (!mounted) return;
         elevation: 0,
         leading: IconButton(
           icon: Icon(
-            Icons.arrow_back, 
-            color: Theme.of(context).colorScheme.onSurface, 
-            size: screenWidth * 0.06
+            Icons.arrow_back,
+            color: Theme.of(context).colorScheme.onSurface,
+            size: screenWidth * 0.06,
           ),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           localizations.newFeedback,
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface, 
+            color: Theme.of(context).colorScheme.onSurface,
             fontWeight: FontWeight.bold,
             fontSize: screenWidth * 0.045,
           ),
@@ -377,8 +431,8 @@ if (!mounted) return;
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                   
-                    if (widget.newsHeadline != null && widget.newsHeadline!.isNotEmpty) ...[
+                    if (widget.newsHeadline != null &&
+                        widget.newsHeadline!.isNotEmpty) ...[
                       Text(
                         localizations.shortHeadline,
                         style: TextStyle(
@@ -400,7 +454,9 @@ if (!mounted) return;
                             color: Colors.grey[400]!,
                             width: screenWidth * 0.003,
                           ),
-                          borderRadius: BorderRadius.circular(screenWidth * 0.02),
+                          borderRadius: BorderRadius.circular(
+                            screenWidth * 0.02,
+                          ),
                         ),
                         child: TextField(
                           controller: _headlineController,
@@ -411,18 +467,20 @@ if (!mounted) return;
                           decoration: InputDecoration(
                             hintText: localizations.shortHeadlinePlaceholder,
                             hintStyle: TextStyle(
-                              color: Theme.of(context).textTheme.titleMedium?.color,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.titleMedium?.color,
                               fontSize: screenWidth * 0.04,
                             ),
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.zero,
                           ),
-                          readOnly: true, // Make it read-only since it's auto-filled
+                          readOnly: true,
                         ),
                       ),
                       SizedBox(height: screenHeight * 0.03),
                     ],
-        
+
                     // Feedback Type Section
                     Text(
                       localizations.feedbackType,
@@ -433,7 +491,7 @@ if (!mounted) return;
                       ),
                     ),
                     SizedBox(height: screenHeight * 0.015),
-                    
+
                     // Feedback Type Selector Button
                     GestureDetector(
                       onTap: _showFeedbackTypeBottomSheet,
@@ -446,11 +504,14 @@ if (!mounted) return;
                         decoration: BoxDecoration(
                           color: Theme.of(context).scaffoldBackgroundColor,
                           border: Border.all(
-                            color: _feedbackTypeError != null ? 
-                                Colors.red : Theme.of(context).colorScheme.outline,
+                            color: _feedbackTypeError != null
+                                ? Colors.red
+                                : Theme.of(context).colorScheme.outline,
                             width: screenWidth * 0.003,
                           ),
-                          borderRadius: BorderRadius.circular(screenWidth * 0.02),
+                          borderRadius: BorderRadius.circular(
+                            screenWidth * 0.02,
+                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -466,14 +527,14 @@ if (!mounted) return;
                             ),
                             Icon(
                               Icons.arrow_drop_down,
-                              color:  Theme.of(context).colorScheme.outline,
+                              color: Theme.of(context).colorScheme.outline,
                               size: screenWidth * 0.06,
                             ),
                           ],
                         ),
                       ),
                     ),
-                    
+
                     // Feedback Type Error Message
                     if (_feedbackTypeError != null) ...[
                       SizedBox(height: screenHeight * 0.01),
@@ -485,16 +546,16 @@ if (!mounted) return;
                         ),
                       ),
                     ],
-        
+
                     SizedBox(height: screenHeight * 0.04),
-        
+
                     // Your Feedback Section
                     Text(
                       localizations.yourFeedback,
                       style: TextStyle(
                         fontSize: screenWidth * 0.04,
                         fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurface, 
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     SizedBox(height: screenHeight * 0.015),
@@ -502,8 +563,9 @@ if (!mounted) return;
                       height: screenHeight * 0.25,
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: _feedbackTextError != null ? 
-                              Colors.red : Theme.of(context).colorScheme.outline,
+                          color: _feedbackTextError != null
+                              ? Colors.red
+                              : Theme.of(context).colorScheme.outline,
                           width: screenWidth * 0.003,
                         ),
                         borderRadius: BorderRadius.circular(screenWidth * 0.02),
@@ -527,7 +589,9 @@ if (!mounted) return;
                         decoration: InputDecoration(
                           hintText: localizations.feedbackPlaceholder,
                           hintStyle: TextStyle(
-                            color: Theme.of(context).textTheme.titleMedium?.color,
+                            color: Theme.of(
+                              context,
+                            ).textTheme.titleMedium?.color,
                             fontSize: screenWidth * 0.04,
                           ),
                           border: InputBorder.none,
@@ -538,7 +602,7 @@ if (!mounted) return;
                         ),
                       ),
                     ),
-                    
+
                     // Feedback Text Error Message
                     if (_feedbackTextError != null) ...[
                       SizedBox(height: screenHeight * 0.01),
@@ -550,9 +614,9 @@ if (!mounted) return;
                         ),
                       ),
                     ],
-        
+
                     SizedBox(height: screenHeight * 0.03),
-        
+
                     // Attach Media Text - Clickable only when no files are selected
                     _selectedFiles.isEmpty
                         ? GestureDetector(
@@ -561,7 +625,7 @@ if (!mounted) return;
                               children: [
                                 Icon(
                                   Icons.attach_file,
-                                  color: Theme.of(context).colorScheme.primary, 
+                                  color: Theme.of(context).colorScheme.primary,
                                   size: screenWidth * 0.05,
                                 ),
                                 SizedBox(width: screenWidth * 0.02),
@@ -570,7 +634,9 @@ if (!mounted) return;
                                   style: TextStyle(
                                     fontSize: screenWidth * 0.04,
                                     fontWeight: FontWeight.w600,
-                                    color: Theme.of(context).colorScheme.primary, 
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
                                   ),
                                 ),
                               ],
@@ -580,7 +646,9 @@ if (!mounted) return;
                             children: [
                               Icon(
                                 Icons.attach_file,
-                                color: Theme.of(context).colorScheme.outlineVariant, 
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.outlineVariant,
                                 size: screenWidth * 0.05,
                               ),
                               SizedBox(width: screenWidth * 0.02),
@@ -589,12 +657,14 @@ if (!mounted) return;
                                 style: TextStyle(
                                   fontSize: screenWidth * 0.04,
                                   fontWeight: FontWeight.w600,
-                                  color: Theme.of(context).colorScheme.outlineVariant, 
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.outlineVariant,
                                 ),
                               ),
                             ],
                           ),
-        
+
                     // Selected Files Display with Add More button
                     if (_selectedFiles.isNotEmpty) ...[
                       SizedBox(height: screenHeight * 0.02),
@@ -602,7 +672,6 @@ if (!mounted) return;
                         spacing: screenWidth * 0.03,
                         runSpacing: screenHeight * 0.02,
                         children: [
-                        
                           ..._selectedFiles.asMap().entries.map((entry) {
                             final index = entry.key;
                             final file = entry.value;
@@ -611,7 +680,9 @@ if (!mounted) return;
                               height: screenHeight * 0.18,
                               decoration: BoxDecoration(
                                 color: Colors.grey[100],
-                                borderRadius: BorderRadius.circular(screenWidth * 0.02),
+                                borderRadius: BorderRadius.circular(
+                                  screenWidth * 0.02,
+                                ),
                                 border: Border.all(
                                   color: Colors.grey[300]!,
                                   width: screenWidth * 0.003,
@@ -622,13 +693,16 @@ if (!mounted) return;
                                   // Image preview
                                   if (_isImageFile(file))
                                     ClipRRect(
-                                      borderRadius: BorderRadius.circular(screenWidth * 0.015),
+                                      borderRadius: BorderRadius.circular(
+                                        screenWidth * 0.015,
+                                      ),
                                       child: Image.file(
                                         File(file.path!),
                                         width: double.infinity,
                                         height: double.infinity,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) {
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
                                           return Container(
                                             color: Colors.grey[200],
                                             child: Icon(
@@ -644,11 +718,13 @@ if (!mounted) return;
                                     Center(
                                       child: Icon(
                                         Icons.insert_drive_file,
-                                        color: Theme.of(context).colorScheme.primary,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                         size: screenWidth * 0.06,
                                       ),
                                     ),
-                                  
+
                                   // Close button
                                   Positioned(
                                     top: screenWidth * 0.005,
@@ -657,12 +733,18 @@ if (!mounted) return;
                                       onTap: () => _removeFile(index),
                                       child: Container(
                                         decoration: BoxDecoration(
-                                          color: Theme.of(context).colorScheme.onSurface, 
-                                          borderRadius: BorderRadius.circular(screenWidth * 0.025),
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
+                                          borderRadius: BorderRadius.circular(
+                                            screenWidth * 0.025,
+                                          ),
                                         ),
                                         child: Icon(
                                           Icons.close,
-                                          color: Theme.of(context).scaffoldBackgroundColor,
+                                          color: Theme.of(
+                                            context,
+                                          ).scaffoldBackgroundColor,
                                           size: screenWidth * 0.035,
                                         ),
                                       ),
@@ -672,7 +754,7 @@ if (!mounted) return;
                               ),
                             );
                           }),
-                          
+
                           // Add More Container
                           GestureDetector(
                             onTap: _pickFile,
@@ -681,7 +763,9 @@ if (!mounted) return;
                               height: screenHeight * 0.18,
                               decoration: BoxDecoration(
                                 color: Colors.grey[50],
-                                borderRadius: BorderRadius.circular(screenWidth * 0.02),
+                                borderRadius: BorderRadius.circular(
+                                  screenWidth * 0.02,
+                                ),
                                 border: Border.all(
                                   color: Colors.grey[400]!,
                                   width: screenWidth * 0.003,
@@ -711,15 +795,14 @@ if (!mounted) return;
                         ],
                       ),
                     ],
-                    
+
                     // Add some extra space at the bottom for scrolling
                     SizedBox(height: screenHeight * 0.02),
                   ],
                 ),
               ),
             ),
-        
-          
+
             Container(
               width: double.infinity,
               padding: EdgeInsets.symmetric(
@@ -734,9 +817,7 @@ if (!mounted) return;
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(screenWidth * 0.02),
                   ),
-                  padding: EdgeInsets.symmetric(
-                    vertical: screenHeight * 0.02,
-                  ),
+                  padding: EdgeInsets.symmetric(vertical: screenHeight * 0.02),
                 ),
                 child: Text(
                   localizations.submitFeedback,

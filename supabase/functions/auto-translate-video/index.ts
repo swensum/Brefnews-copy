@@ -37,7 +37,7 @@ serve(async (req) => {
   try {
     // Parse the webhook payload
     const payload = await req.json();
-    console.log('📥 Full webhook payload received');
+    console.log('📥 Full webhook payload received for video article');
 
     const record = payload.record;
     if (!record) {
@@ -48,20 +48,20 @@ serve(async (req) => {
       });
     }
 
-    const article_id = record.id;
+    const video_id = record.id;
     const title = record.title;
-    const summary = record.summary;
-    const headline = record.headline;
+    const source_name = record.source_name;
+    const platform_name = record.platform_name;
 
-    console.log('🔍 Extracted article data:', { 
-      article_id, 
+    console.log('🔍 Extracted video article data:', { 
+      video_id, 
       title: title ? `"${title.substring(0, 50)}..."` : 'NULL',
-      summary: summary ? `"${summary.substring(0, 50)}..."` : 'NULL',
-      headline: headline ? JSON.stringify(headline) : 'NULL'
+      source_name: source_name ? `"${source_name}"` : 'NULL',
+      platform_name: platform_name ? `"${platform_name}"` : 'NULL'
     });
 
-    if (!article_id) {
-      return new Response(JSON.stringify({ error: 'Article ID is required' }), {
+    if (!video_id) {
+      return new Response(JSON.stringify({ error: 'Video ID is required' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400
       });
@@ -73,7 +73,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    console.log('✅ Starting translation for ALL fields...');
+    console.log('✅ Starting translation for video article fields...');
 
     const results = [];
     let successCount = 0;
@@ -81,7 +81,7 @@ serve(async (req) => {
     // Translate to all supported languages
     for (const target_language of supportedLanguages) {
       try {
-        console.log(`\n🔄 Translating to ${target_language}...`);
+        console.log(`\n🔄 Translating video article to ${target_language}...`);
 
         // 1. TRANSLATE TITLE
         let translatedTitle = title;
@@ -90,51 +90,34 @@ serve(async (req) => {
           console.log(`   📝 Title: ${title !== translatedTitle ? 'TRANSLATED' : 'SAME'}`);
         }
 
-        // 2. TRANSLATE SUMMARY
-        let translatedSummary = summary;
-        if (summary && summary.trim() !== '') {
-          translatedSummary = await translateText(summary, target_language);
-          console.log(`   📄 Summary: ${summary !== translatedSummary ? 'TRANSLATED' : 'SAME'}`);
+        // 2. TRANSLATE SOURCE NAME (if needed)
+        let translatedSourceName = source_name;
+        if (source_name && source_name.trim() !== '') {
+          translatedSourceName = await translateText(source_name, target_language);
+          console.log(`   🏢 Source Name: ${source_name !== translatedSourceName ? 'TRANSLATED' : 'SAME'}`);
         }
 
-        // 3. TRANSLATE HEADLINE OBJECT (both headline and subheadline)
-        let translatedHeadline = headline;
-        if (headline && typeof headline === 'object') {
-          console.log(`   🎯 Headline object:`, headline);
-          
-          const translatedHeadlineObj = { ...headline };
-          
-          // Translate main headline
-          if (headline.headline && headline.headline.trim() !== '') {
-            translatedHeadlineObj.headline = await translateText(headline.headline, target_language);
-            console.log(`     - Headline: ${headline.headline !== translatedHeadlineObj.headline ? 'TRANSLATED' : 'SAME'}`);
-          }
-          
-          // Translate subheadline
-          if (headline.subheadline && headline.subheadline.trim() !== '') {
-            translatedHeadlineObj.subheadline = await translateText(headline.subheadline, target_language);
-            console.log(`     - Subheadline: ${headline.subheadline !== translatedHeadlineObj.subheadline ? 'TRANSLATED' : 'SAME'}`);
-          }
-          
-          translatedHeadline = translatedHeadlineObj;
-        } else {
-          console.log(`   🎯 Headline: No headline object to translate`);
+        // 3. TRANSLATE PLATFORM NAME (if needed)
+        let translatedPlatformName = platform_name;
+        if (platform_name && platform_name.trim() !== '') {
+          translatedPlatformName = await translateText(platform_name, target_language);
+          console.log(`   📱 Platform Name: ${platform_name !== translatedPlatformName ? 'TRANSLATED' : 'SAME'}`);
         }
 
         console.log(`✅ Completed translation for ${target_language}`);
 
-        // Save to database
+        // Save to database - create a new table for video translations
         const { error } = await supabaseClient
-          .from('news_translations')
+          .from('video_translations')
           .upsert({
-            news_article_id: article_id,
+            video_article_id: video_id,
             language_code: target_language,
             translated_title: translatedTitle,
-            translated_summary: translatedSummary,
-            translated_headline: translatedHeadline,
+            translated_source_name: translatedSourceName,
+            translated_platform_name: translatedPlatformName,
             updated_at: new Date().toISOString()
           }, {
-            onConflict: 'news_article_id,language_code'
+            onConflict: 'video_article_id,language_code'
           });
 
         if (error) {
@@ -148,8 +131,8 @@ serve(async (req) => {
           language: target_language,
           success: !error,
           title_translated: title !== translatedTitle,
-          summary_translated: summary !== translatedSummary,
-          headline_translated: JSON.stringify(headline) !== JSON.stringify(translatedHeadline)
+          source_name_translated: source_name !== translatedSourceName,
+          platform_name_translated: platform_name !== translatedPlatformName
         });
 
         // Small delay to avoid rate limiting
@@ -161,16 +144,16 @@ serve(async (req) => {
         // Create fallback entry with original text
         try {
           await supabaseClient
-            .from('news_translations')
+            .from('video_translations')
             .upsert({
-              news_article_id: article_id,
+              video_article_id: video_id,
               language_code: target_language,
               translated_title: title,
-              translated_summary: summary,
-              translated_headline: headline,
+              translated_source_name: source_name,
+              translated_platform_name: platform_name,
               updated_at: new Date().toISOString()
             }, {
-              onConflict: 'news_article_id,language_code'
+              onConflict: 'video_article_id,language_code'
             });
           console.log(`🛟 Created fallback entry for ${target_language}`);
         } catch (dbError) {
@@ -179,19 +162,19 @@ serve(async (req) => {
       }
     }
 
-    console.log(`\n🎉 TRANSLATION SUMMARY: ${successCount}/${supportedLanguages.length} languages succeeded`);
+    console.log(`\n🎉 VIDEO TRANSLATION SUMMARY: ${successCount}/${supportedLanguages.length} languages succeeded`);
 
     // Final verification
     const { data: translations } = await supabaseClient
-      .from('news_translations')
-      .select('language_code, translated_title, translated_summary, translated_headline')
-      .eq('news_article_id', article_id);
+      .from('video_translations')
+      .select('language_code, translated_title, translated_source_name, translated_platform_name')
+      .eq('video_article_id', video_id);
 
     console.log(`📊 Created ${translations?.length || 0} translation records`);
 
     return new Response(JSON.stringify({
       success: true,
-      article_id: article_id,
+      video_id: video_id,
       translations_created: successCount,
       total_languages: supportedLanguages.length,
       results: results
@@ -200,9 +183,9 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('💥 Webhook processing error:', error);
+    console.error('💥 Video webhook processing error:', error);
     return new Response(JSON.stringify({ 
-      error: 'Webhook processing failed',
+      error: 'Video webhook processing failed',
       details: error.message 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

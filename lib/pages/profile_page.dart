@@ -360,7 +360,7 @@ final localizations = AppLocalizations.of(context)!;
               formattedDate,
               style: TextStyle(
                 color: Theme.of(context).textTheme.titleMedium?.color,
-                fontSize: screenWidth * 0.033,
+                fontSize: screenWidth * 0.03,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -378,7 +378,7 @@ final localizations = AppLocalizations.of(context)!;
                         news.title,
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurface,
-                          fontSize: screenWidth * 0.042,
+                          fontSize: screenWidth * 0.035,
                           fontWeight: FontWeight.bold,
                         ),
                         maxLines: 3,
@@ -393,8 +393,8 @@ final localizations = AppLocalizations.of(context)!;
                     borderRadius: BorderRadius.circular(8),
                     child: Image.network(
                       news.imageUrl!,
-                      width: screenWidth * 0.18,
-                      height: screenWidth * 0.18,
+                      width: screenWidth * 0.16,
+                      height: screenWidth * 0.16,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -27,36 +25,42 @@ class _SearchPageState extends State<SearchPage> {
   @override
   void initState() {
     super.initState();
-   
+    _loadTopics();
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final newsProvider = Provider.of<NewsProvider>(context, listen: false);
-      newsProvider.fetchTopics().then((_) {
-        if (newsProvider.topics.isNotEmpty) {
-          final firstTopic = newsProvider.topics[0];
-          final topicName = firstTopic['name'] as String;
-          newsProvider.fetchNewsByTopic(topicName);
-        }
-      });
+  void _loadTopics() {
+    final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+    newsProvider.fetchTopics().then((_) {
+      if (newsProvider.topics.isNotEmpty) {
+        final firstTopic = newsProvider.topics[0];
+        final topicName = firstTopic['name'] as String;
+        newsProvider.fetchNewsByTopic(topicName);
+      }
     });
   }
 
-  // Add this method to get localized category name
-  String _getLocalizedCategoryName(String englishCategory, BuildContext context) {
+  String _getLocalizedCategoryName(
+    String englishCategory,
+    BuildContext context,
+  ) {
     final localizations = AppLocalizations.of(context);
     if (localizations == null) return englishCategory;
-    
+
     switch (englishCategory) {
-      case 'My Feed': return localizations.myFeed;
-      case 'Top Stories': return localizations.topStories;
-      case 'Trending': return localizations.trending;
-      case 'Bookmarks': return localizations.bookmarks;
-      case 'Unread': return localizations.unread;
-      default: return englishCategory;
+      case 'My Feed':
+        return localizations.myFeed;
+      case 'Top Stories':
+        return localizations.topStories;
+      case 'Trending':
+        return localizations.trending;
+      case 'Bookmarks':
+        return localizations.bookmarks;
+      case 'Unread':
+        return localizations.unread;
+      default:
+        return englishCategory;
     }
   }
-
-  // Add this method to map localized category back to English
 
   void _performSearch(String query) {
     if (query.isEmpty) {
@@ -68,20 +72,34 @@ class _SearchPageState extends State<SearchPage> {
 
     final newsProvider = Provider.of<NewsProvider>(context, listen: false);
     final allNews = newsProvider.allNews;
+    final topicNews = newsProvider.topicNews;
+    final allAvailableNews = [...allNews, ...topicNews];
+    final uniqueNews = <News>[];
+    final seenIds = <String>{};
 
-    final results = allNews.where((news) {
-      final titleMatch = news.title.toLowerCase().contains(query.toLowerCase());
-      final categoryMatch = news.category.toLowerCase().contains(
-        query.toLowerCase(),
-      );
-      final sourceMatch = news.source.toLowerCase().contains(
-        query.toLowerCase(),
-      );
-      final summaryMatch = news.summary.toLowerCase().contains(
-        query.toLowerCase(),
+    for (final news in allAvailableNews) {
+      if (!seenIds.contains(news.id)) {
+        uniqueNews.add(news);
+        seenIds.add(news.id);
+      }
+    }
+
+    final results = uniqueNews.where((news) {
+      final searchQuery = query.toLowerCase();
+
+      final titleMatch = news.title.toLowerCase().contains(searchQuery);
+      final categoryMatch = news.category.toLowerCase().contains(searchQuery);
+      final sourceMatch = news.source.toLowerCase().contains(searchQuery);
+      final summaryMatch = news.summary.toLowerCase().contains(searchQuery);
+      final categoriesMatch = news.categories.any(
+        (cat) => cat.toLowerCase().contains(searchQuery),
       );
 
-      return titleMatch || categoryMatch || sourceMatch || summaryMatch;
+      return titleMatch ||
+          categoryMatch ||
+          sourceMatch ||
+          summaryMatch ||
+          categoriesMatch;
     }).toList();
 
     setState(() {
@@ -91,18 +109,11 @@ class _SearchPageState extends State<SearchPage> {
 
   void _clearSearch() {
     _searchController.clear();
+    _searchFocusNode.unfocus();
     setState(() {
       _searchResults.clear();
       _showSearchScreen = false;
     });
-  }
-
-  void _showSearchResultsScreen() {
-    if (_searchController.text.isNotEmpty) {
-      setState(() {
-        _showSearchScreen = true;
-      });
-    }
   }
 
   void _handleTopicTap(Map<String, dynamic> topic, BuildContext context) {
@@ -112,61 +123,52 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
- void _handleCategoryTap(String englishCategory, BuildContext context) {
-  final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+  void _handleCategoryTap(String englishCategory, BuildContext context) {
+    final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+    print('🟢 [SearchPage] Handling category tap: $englishCategory');
+    switch (englishCategory) {
+      case 'My Feed':
+        newsProvider.setCategory('My Feed');
 
-  print('🟢 [SearchPage] Handling category tap: $englishCategory');
+        newsProvider.loadNews().then((_) {
+          if (!context.mounted) return;
+          context.go('/home');
+        });
+        break;
 
-  switch (englishCategory) {
-    
-    case 'My Feed':
-      
-      newsProvider.setCategory('My Feed');
-      
-      newsProvider.loadNews().then((_) {
-         
-    if (!context.mounted) return;
+      case 'Bookmarks':
+        if (newsProvider.hasBookmarks) {
+          newsProvider.addDynamicCategory('Bookmarks');
+          newsProvider.setCategory('Bookmarks');
+          context.go('/home');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No bookmarks yet! Save some articles first.'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+        break;
+
+      case 'Top Stories':
+      case 'Trending':
+      case 'Unread':
+        newsProvider.addDynamicCategory(englishCategory);
+        newsProvider.setCategory(englishCategory);
         context.go('/home');
-      });
-      break;
+        break;
 
-    case 'Bookmarks':
-      if (newsProvider.hasBookmarks) {
-        newsProvider.addDynamicCategory('Bookmarks');
-        // Set category - NO reload needed for Bookmarks
-        newsProvider.setCategory('Bookmarks');
-        context.go('/home');
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No bookmarks yet! Save some articles first.'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-      break;
-
-    case 'Top Stories':
-    case 'Trending':
-    case 'Unread':
-      newsProvider.addDynamicCategory(englishCategory);
-      // Set category - NO reload needed for these UI categories
-      newsProvider.setCategory(englishCategory);
-      context.go('/home');
-      break;
-
-    default:
-      newsProvider.addDynamicCategory(englishCategory);
-      // Set category and reload news BEFORE navigation for content categories
-      newsProvider.setCategory(englishCategory);
-      newsProvider.loadNews().then((_) {
-         
-    if (!context.mounted) return;
-        context.go('/home');
-      });
-      break;
+      default:
+        newsProvider.addDynamicCategory(englishCategory);
+        newsProvider.setCategory(englishCategory);
+        newsProvider.loadNews().then((_) {
+          if (!context.mounted) return;
+          context.go('/home');
+        });
+        break;
+    }
   }
-}
 
   @override
   void dispose() {
@@ -225,13 +227,13 @@ class _SearchPageState extends State<SearchPage> {
                       controller: _searchController,
                       focusNode: _searchFocusNode,
                       style: TextStyle(
-                        color:  Colors.black,
+                        color: Colors.black,
                         fontSize: screenWidth * 0.04,
                       ),
                       decoration: InputDecoration(
                         hintText: localizations.searchForNews,
                         hintStyle: TextStyle(
-                          color: Colors.black87, 
+                          color: Colors.black87,
                           fontSize: screenWidth * 0.04,
                         ),
                         border: InputBorder.none,
@@ -239,17 +241,20 @@ class _SearchPageState extends State<SearchPage> {
                           vertical: screenHeight * 0.015,
                         ),
                       ),
-                      
                       onChanged: (value) {
-                        // Real-time search as user types
-                        Future.delayed(const Duration(milliseconds: 10), () {
-                          _performSearch(value);
-                        });
+                        if (value.isEmpty) {
+                          setState(() {
+                            _searchResults.clear();
+                            _showSearchScreen = false;
+                          });
+                        }
                       },
                       onSubmitted: (value) {
-                        // When user presses enter/search on keyboard
                         if (value.isNotEmpty) {
-                          _showSearchResultsScreen();
+                          _performSearch(value);
+                          setState(() {
+                            _showSearchScreen = true;
+                          });
                         }
                       },
                     ),
@@ -269,16 +274,10 @@ class _SearchPageState extends State<SearchPage> {
             ),
           ),
         ),
-
-        // Show normal content when not searching or when search field is empty
-        if (!_searchFocusNode.hasFocus || _searchController.text.isEmpty)
+        if (!_showSearchScreen)
           Expanded(child: _buildNormalContent(screenWidth, screenHeight)),
-
-        // Show blank space when searching (no search button)
-        if (_searchFocusNode.hasFocus && _searchController.text.isNotEmpty)
-          Expanded(
-            child: Container(), // Blank space
-          ),
+        if (_showSearchScreen)
+          Expanded(child: _buildSearchResultsScreen(screenWidth, screenHeight)),
       ],
     );
   }
@@ -287,7 +286,6 @@ class _SearchPageState extends State<SearchPage> {
     final localizations = AppLocalizations.of(context)!;
     return Column(
       children: [
-        // Header with back button and search info
         Container(
           padding: EdgeInsets.symmetric(
             horizontal: screenWidth * 0.04,
@@ -358,11 +356,18 @@ class _SearchPageState extends State<SearchPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.search_off, color: Theme.of(context).colorScheme.outlineVariant, size: screenWidth * 0.15),
+          Icon(
+            Icons.search_off,
+            color: Theme.of(context).colorScheme.outlineVariant,
+            size: screenWidth * 0.15,
+          ),
           SizedBox(height: screenHeight * 0.02),
           Text(
             '${localizations.noResultsFoundFor}"${_searchController.text}"',
-            style: TextStyle(color: Theme.of(context).colorScheme.outlineVariant,fontSize: screenWidth * 0.04),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.outlineVariant,
+              fontSize: screenWidth * 0.04,
+            ),
             textAlign: TextAlign.center,
           ),
           SizedBox(height: screenHeight * 0.01),
@@ -396,8 +401,6 @@ class _SearchPageState extends State<SearchPage> {
     return GestureDetector(
       onTap: () {
         final newsProvider = Provider.of<NewsProvider>(context, listen: false);
-
-        // Try to find the actual topic this news belongs to
         Map<String, dynamic>? foundTopic;
         for (var topic in newsProvider.topics) {
           final topicName = topic['name'] as String;
@@ -446,7 +449,7 @@ class _SearchPageState extends State<SearchPage> {
                       Text(
                         news.category,
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary, 
+                          color: Theme.of(context).colorScheme.primary,
                           fontSize: screenWidth * 0.03,
                           fontWeight: FontWeight.w500,
                         ),
@@ -481,7 +484,7 @@ class _SearchPageState extends State<SearchPage> {
                           ),
                           child: Icon(
                             Icons.article,
-                            color: Theme.of(context).colorScheme.outlineVariant, 
+                            color: Theme.of(context).colorScheme.outlineVariant,
                             size: screenWidth * 0.06,
                           ),
                         );
@@ -498,14 +501,18 @@ class _SearchPageState extends State<SearchPage> {
                     ),
                     child: Icon(
                       Icons.article,
-                      color: Theme.of(context).colorScheme.outlineVariant, 
+                      color: Theme.of(context).colorScheme.outlineVariant,
                       size: screenWidth * 0.06,
                     ),
                   ),
               ],
             ),
           ),
-          Container(width: double.infinity, height: 1, color: Theme.of(context).colorScheme.outline),
+          Container(
+            width: double.infinity,
+            height: 1,
+            color: Theme.of(context).colorScheme.outline,
+          ),
         ],
       ),
     );
@@ -529,14 +536,18 @@ class _SearchPageState extends State<SearchPage> {
                 child: Row(
                   children: [
                     ...newsProvider.searchCategories.map((englishCategory) {
-                      final localizedCategory = _getLocalizedCategoryName(englishCategory, context);
+                      final localizedCategory = _getLocalizedCategoryName(
+                        englishCategory,
+                        context,
+                      );
                       return Container(
                         margin: EdgeInsets.only(right: screenWidth * 0.07),
                         child: _buildCategoryItem(
                           context,
                           icon: _getCategoryIcon(englishCategory),
                           title: localizedCategory,
-                          onTap: () => _handleCategoryTap(englishCategory, context),
+                          onTap: () =>
+                              _handleCategoryTap(englishCategory, context),
                         ),
                       );
                     }),
@@ -547,115 +558,126 @@ class _SearchPageState extends State<SearchPage> {
           ),
 
           SizedBox(height: screenHeight * 0.03),
-
-          // Notifications Section
-          SizedBox(
-            height: screenHeight * 0.5,
-            child: Column(
-              children: [
-                Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: screenWidth * 0.04,
-                    vertical: screenHeight * 0.001,
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                               localizations.notifications,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSurface, 
-                                  fontSize: screenWidth * 0.057,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: screenHeight * 0.01),
-                              Container(
-                                width: screenWidth * 0.12,
-                                height: 2,
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.onSurface,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            ],
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              context.push('/notifications');
-                            },
-                            child: Text(
-                             localizations.viewAll,
+          Column(
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: screenWidth * 0.04,
+                  vertical: screenHeight * 0.001,
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              localizations.notifications,
                               style: TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontSize: screenWidth * 0.04,
-                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontSize: screenWidth * 0.057,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                Expanded(
-                  child: Consumer<NewsProvider>(
-                    builder: (context, newsProvider, child) {
-                      final notifiedNews = newsProvider.notifiedNews;
-
-                      if (notifiedNews.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.notifications_none,
-                                color: Theme.of(context).colorScheme.onSecondary,
-                                size: screenWidth * 0.15,
+                            SizedBox(height: screenHeight * 0.01),
+                            Container(
+                              width: screenWidth * 0.12,
+                              height: 2,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                              SizedBox(height: screenHeight * 0.02),
-                              Text(
-                                localizations.noNotifications,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSecondary,
-                                  fontSize: screenWidth * 0.04,
-                                ),
-                              ),
-                              SizedBox(height: screenHeight * 0.01),
-                              Text(
-                                localizations.youWillSeeNotificationsHere,
-                                style: TextStyle(
-                                  color: Theme.of(context).textTheme.bodyLarge?.color,
-                                  fontSize: screenWidth * 0.035,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      return ListView.builder(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: screenWidth * 0.04,
+                            ),
+                          ],
                         ),
-                        itemCount: notifiedNews.length,
-                        itemBuilder: (context, index) {
-                          final news = notifiedNews[index];
-                          return _buildNotificationItem(context, news: news);
-                        },
-                      );
-                    },
-                  ),
+                        GestureDetector(
+                          onTap: () {
+                            context.push('/notifications');
+                          },
+                          child: Text(
+                            localizations.viewAll,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontSize: screenWidth * 0.04,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+
+              Consumer<NewsProvider>(
+                builder: (context, newsProvider, child) {
+                  final notifiedNews = newsProvider.notifiedNews;
+                  final latestNotifications = notifiedNews.take(4).toList();
+
+                  if (notifiedNews.isEmpty) {
+                    return SizedBox(
+                      height: screenHeight * 0.15,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.notifications_none,
+                              color: Theme.of(context).colorScheme.onSecondary,
+                              size: screenWidth * 0.15,
+                            ),
+                            SizedBox(height: screenHeight * 0.02),
+                            Text(
+                              localizations.noNotifications,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSecondary,
+                                fontSize: screenWidth * 0.04,
+                              ),
+                            ),
+                            SizedBox(height: screenHeight * 0.01),
+                            Text(
+                              localizations.youWillSeeNotificationsHere,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodyLarge?.color,
+                                fontSize: screenWidth * 0.035,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: screenWidth * 0.04,
+                    ),
+                    child: Column(
+                      children: [
+                        ...latestNotifications.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final news = entry.value;
+                          final isLastItem =
+                              index == latestNotifications.length - 1;
+                          return _buildNotificationItem(
+                            context,
+                            news: news,
+                            showBottomBar: !isLastItem,
+                          );
+                        }),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
 
           SizedBox(height: screenHeight * 0.03),
@@ -675,7 +697,7 @@ class _SearchPageState extends State<SearchPage> {
                     Text(
                       localizations.topics,
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface, 
+                        color: Theme.of(context).colorScheme.onSurface,
                         fontSize: screenWidth * 0.057,
                         fontWeight: FontWeight.bold,
                       ),
@@ -687,7 +709,7 @@ class _SearchPageState extends State<SearchPage> {
                       child: Text(
                         localizations.viewAll,
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary, 
+                          color: Theme.of(context).colorScheme.primary,
                           fontSize: screenWidth * 0.04,
                           fontWeight: FontWeight.w700,
                         ),
@@ -703,7 +725,7 @@ class _SearchPageState extends State<SearchPage> {
                       return Container(
                         width: double.infinity,
                         height: 2,
-                        color: Theme.of(context).colorScheme.onSurface, 
+                        color: Theme.of(context).colorScheme.onSurface,
                       );
                     }
 
@@ -715,7 +737,7 @@ class _SearchPageState extends State<SearchPage> {
                       width: double.infinity,
                       height: 2,
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.outline, 
+                        color: Theme.of(context).colorScheme.outline,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Stack(
@@ -729,7 +751,7 @@ class _SearchPageState extends State<SearchPage> {
                               width: blueBarWidth,
                               height: 2,
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary, 
+                                color: Theme.of(context).colorScheme.primary,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
@@ -750,9 +772,11 @@ class _SearchPageState extends State<SearchPage> {
                         height: screenHeight * 0.1,
                         child: Center(
                           child: Text(
-                           localizations.noTopicsAvailable,
+                            localizations.noTopicsAvailable,
                             style: TextStyle(
-                              color: Theme.of(context).textTheme.bodyLarge?.color,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodyLarge?.color,
                               fontSize: screenWidth * 0.035,
                             ),
                           ),
@@ -802,7 +826,9 @@ class _SearchPageState extends State<SearchPage> {
                 return SizedBox(
                   height: screenHeight * 0.3,
                   child: Center(
-                    child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary, ),
+                    child: CircularProgressIndicator(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                 );
               }
@@ -866,7 +892,7 @@ class _SearchPageState extends State<SearchPage> {
                             SizedBox(width: screenWidth * 0.02),
                             Icon(
                               Icons.arrow_forward,
-                              color:Theme.of(context).colorScheme.primary,
+                              color: Theme.of(context).colorScheme.primary,
                               size: screenWidth * 0.04,
                             ),
                           ],
@@ -883,7 +909,8 @@ class _SearchPageState extends State<SearchPage> {
       ),
     );
   }
-Widget _buildTopicNewsItem(
+
+  Widget _buildTopicNewsItem(
     BuildContext context, {
     required News news,
     bool showBottomBar = true,
@@ -921,7 +948,7 @@ Widget _buildTopicNewsItem(
                       Text(
                         news.title,
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface, 
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontSize: screenWidth * 0.038,
                           fontWeight: FontWeight.w500,
                         ),
@@ -967,7 +994,7 @@ Widget _buildTopicNewsItem(
                     ),
                     child: Icon(
                       Icons.article,
-                      color:Theme.of(context).colorScheme.primary,
+                      color: Theme.of(context).colorScheme.primary,
                       size: screenWidth * 0.06,
                     ),
                   ),
@@ -1029,12 +1056,16 @@ Widget _buildTopicNewsItem(
                             width: containerSize,
                             height: containerSize,
                             decoration: BoxDecoration(
-                              color: Theme.of(context).textTheme.bodyLarge?.color,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodyLarge?.color,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
                               Icons.topic,
-                              color: Theme.of(context).colorScheme.outlineVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant,
                               size: iconSize,
                             ),
                           );
@@ -1049,8 +1080,7 @@ Widget _buildTopicNewsItem(
                         ),
                         child: Icon(
                           Icons.topic,
-                          color: 
-Theme.of(context).colorScheme.outlineVariant, 
+                          color: Theme.of(context).colorScheme.outlineVariant,
                           size: iconSize,
                         ),
                       ),
@@ -1061,7 +1091,9 @@ Theme.of(context).colorScheme.outlineVariant,
             Text(
               topicName,
               style: TextStyle(
-                color: isActive ? Theme.of(context).colorScheme.primary : Theme.of(context).textTheme.titleMedium?.color,
+                color: isActive
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).textTheme.titleMedium?.color,
                 fontSize: fontSize,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.w700,
               ),
@@ -1117,7 +1149,11 @@ Theme.of(context).colorScheme.outlineVariant,
         padding: const EdgeInsets.only(left: 10, bottom: 20),
         child: Column(
           children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary, size: screenWidth * 0.13),
+            Icon(
+              icon,
+              color: Theme.of(context).colorScheme.primary,
+              size: screenWidth * 0.13,
+            ),
             SizedBox(height: screenWidth * 0.02),
             Text(
               title,
@@ -1133,7 +1169,11 @@ Theme.of(context).colorScheme.outlineVariant,
     );
   }
 
-  Widget _buildNotificationItem(BuildContext context, {required News news}) {
+  Widget _buildNotificationItem(
+    BuildContext context, {
+    required News news,
+    bool showBottomBar = true,
+  }) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
@@ -1179,7 +1219,7 @@ Theme.of(context).colorScheme.outlineVariant,
                           ),
                           child: Icon(
                             Icons.article,
-                            color: Theme.of(context).colorScheme.outlineVariant, 
+                            color: Theme.of(context).colorScheme.outlineVariant,
                             size: screenWidth * 0.06,
                           ),
                         );
@@ -1196,14 +1236,20 @@ Theme.of(context).colorScheme.outlineVariant,
                     ),
                     child: Icon(
                       Icons.article,
-                      color: Theme.of(context).colorScheme.outlineVariant, 
+                      color: Theme.of(context).colorScheme.outlineVariant,
                       size: screenWidth * 0.06,
                     ),
                   ),
               ],
             ),
           ),
-          Container(width: double.infinity, height: 1, color: Theme.of(context).colorScheme.outline),
+          // Only show bottom bar if showBottomBar is true
+          if (showBottomBar)
+            Container(
+              width: double.infinity,
+              height: 1,
+              color: Theme.of(context).colorScheme.outline,
+            ),
         ],
       ),
     );

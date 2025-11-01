@@ -21,6 +21,11 @@ class LandingPage extends StatefulWidget {
 
 class _LandingPageState extends State<LandingPage> {
   final ScrollController _categoriesScrollController = ScrollController();
+  bool _showNewNewsIndicator = false;
+  int _newNewsCount = 0;
+  int _lastNewsCount = 0;
+  bool _isRefreshing = false;
+  int _lastHomeTapTime = 0;
 
   @override
   void initState() {
@@ -28,16 +33,111 @@ class _LandingPageState extends State<LandingPage> {
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToSelectedCategory();
+      _initializeNewsMonitoring();
     });
   }
 
-  // FIXED: Get ALL categories including dynamic ones
+  void _initializeNewsMonitoring() {
+    final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+    _lastNewsCount = newsProvider.allNews.length;
+    _startNewsMonitoring();
+  }
+
+  void _startNewsMonitoring() {
+    // Check for new news every 2 minutes
+    Future.delayed(Duration(minutes: 2), () {
+      if (mounted) {
+        _checkForNewNews();
+      }
+    });
+  }
+
+  void _checkForNewNews() {
+    final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+    final currentCount = newsProvider.allNews.length;
+    
+    if (currentCount > _lastNewsCount && widget.currentIndex == 1) {
+      final newCount = currentCount - _lastNewsCount;
+      _showNewNewsIndicator = true;
+      _newNewsCount = newCount;
+      _lastNewsCount = currentCount;
+      
+      if (mounted) {
+        setState(() {});
+      }
+      
+      // Auto hide after 8 seconds
+      Future.delayed(Duration(seconds: 8), () {
+        if (mounted && _showNewNewsIndicator) {
+          setState(() {
+            _showNewNewsIndicator = false;
+          });
+        }
+      });
+    }
+    
+    _startNewsMonitoring();
+  }
+
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+    
+    setState(() {
+      _isRefreshing = true;
+      _showNewNewsIndicator = false;
+    });
+
+    final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+    
+    try {
+      newsProvider.refreshNews();
+      
+      // Wait for refresh to complete
+      await Future.delayed(Duration(seconds: 2));
+      
+      _lastNewsCount = newsProvider.allNews.length;
+    } catch (e) {
+      // Silent fail - no snackbar
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
+  }
+
+  void _onBottomNavTap(int index) {
+    final currentTime = DateTime.now().millisecondsSinceEpoch;
+    
+    // If user taps home icon while already on home page, refresh news
+    if (index == 1 && widget.currentIndex == 1) {
+      // Check if it's a quick double-tap (within 500ms)
+      if (currentTime - _lastHomeTapTime < 500) {
+        _handleRefresh();
+      }
+      _lastHomeTapTime = currentTime;
+    }
+    
+    switch (index) {
+      case 0:
+        context.go('/search');
+        break;
+      case 1:
+        context.go('/home');
+        break;
+      case 2:
+        context.go('/profile');
+        break;
+    }
+  }
+
+  // Categories methods
   List<String> _getLocalizedCategories(BuildContext context) {
     final newsProvider = Provider.of<NewsProvider>(context, listen: false);
     final localizations = AppLocalizations.of(context);
-    if (localizations == null) return newsProvider.categories; // Use actual categories from provider
+    if (localizations == null) return newsProvider.categories;
     
-    // Map ALL categories (both static and dynamic) to localized versions
     return newsProvider.categories.map((englishCategory) {
       switch (englishCategory) {
         case 'My Feed': return localizations.myFeed;
@@ -54,7 +154,6 @@ class _LandingPageState extends State<LandingPage> {
     }).toList();
   }
 
-  // FIXED: Map ALL localized categories back to English
   String _mapToEnglishCategory(String localizedCategory, BuildContext context) {
     final localizations = AppLocalizations.of(context);
     if (localizations == null) return localizedCategory;
@@ -77,7 +176,6 @@ class _LandingPageState extends State<LandingPage> {
     final categories = _getLocalizedCategories(context);
     final selectedCategory = newsProvider.selectedCategory;
     
-    // Map the selected category to localized version for comparison
     final selectedLocalized = _getLocalizedCategoryName(selectedCategory, context);
     
     final selectedIndex = categories.indexOf(selectedLocalized);
@@ -94,7 +192,6 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
-  // Helper method to get localized name for a single category
   String _getLocalizedCategoryName(String englishCategory, BuildContext context) {
     final localizations = AppLocalizations.of(context);
     if (localizations == null) return englishCategory;
@@ -116,10 +213,8 @@ class _LandingPageState extends State<LandingPage> {
   void _onCategorySelected(int index, String category) {
     final newsProvider = Provider.of<NewsProvider>(context, listen: false);
     
-    // Map the localized category back to English for the provider
     final englishCategory = _mapToEnglishCategory(category, context);
     
-    // Check if it's bookmarks category
     final localizations = AppLocalizations.of(context);
     if (englishCategory == 'Bookmarks' && !newsProvider.hasBookmarks) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -131,31 +226,91 @@ class _LandingPageState extends State<LandingPage> {
       return;
     }
     
-    print('🟢 [LandingPage] Setting category: $englishCategory');
     newsProvider.setCategory(englishCategory);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToSelectedCategory();
     });
   }
 
-  void _onBottomNavTap(int index) {
-    switch (index) {
-      case 0:
-        context.go('/search');
-        break;
-      case 1:
-        context.go('/home');
-        break;
-      case 2:
-        context.go('/profile');
-        break;
-    }
-  }
-
-  @override
-  void dispose() {
-    _categoriesScrollController.dispose();
-    super.dispose();
+  Widget _buildNewNewsIndicator() {
+    if (!_showNewNewsIndicator) return SizedBox.shrink();
+    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final localizations = AppLocalizations.of(context);
+    
+    return GestureDetector(
+      onTap: _handleRefresh,
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(
+          horizontal: screenWidth * 0.04,
+          vertical: screenWidth * 0.025,
+        ),
+        margin: EdgeInsets.symmetric(
+          horizontal: screenWidth * 0.04,
+          vertical: screenWidth * 0.015,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(screenWidth * 0.03),
+          border: Border.all(color: Colors.blue.shade200, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: screenWidth * 0.02,
+              spreadRadius: screenWidth * 0.005,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(screenWidth * 0.015),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.new_releases,
+                    color: Colors.white,
+                    size: screenWidth * 0.045,
+                  ),
+                ),
+                SizedBox(width: screenWidth * 0.03),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$_newNewsCount ${localizations?.newNewsAvailable ?? 'New News Available'}',
+                      style: TextStyle(
+                        color: Colors.blue.shade800,
+                        fontSize: screenWidth * 0.038,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Tap to refresh',
+                      style: TextStyle(
+                        color: Colors.blue.shade600,
+                        fontSize: screenWidth * 0.03,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Icon(
+              Icons.refresh,
+              color: Colors.blue.shade600,
+              size: screenWidth * 0.05,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildCategoriesList() {
@@ -175,12 +330,8 @@ class _LandingPageState extends State<LandingPage> {
             itemCount: categories.length,
             itemBuilder: (context, index) {
               final category = categories[index];
-              
-              // Get the English version of the current selected category
               final englishSelectedCategory = newsProvider.selectedCategory;
-              // Get the localized version of the selected category
               final localizedSelectedCategory = _getLocalizedCategoryName(englishSelectedCategory, context);
-              
               final isSelected = localizedSelectedCategory == category;
 
               return GestureDetector(
@@ -196,8 +347,8 @@ class _LandingPageState extends State<LandingPage> {
                     style: TextStyle(
                       color: isSelected ? Colors.blue : Colors.grey[300],
                       fontSize: isSelected
-                          ? screenWidth * 0.045 
-                          : screenWidth * 0.04,
+                          ? screenWidth * 0.04 
+                          : screenWidth * 0.035,
                       fontWeight:
                           isSelected ? FontWeight.bold : FontWeight.w500,
                     ),
@@ -212,17 +363,69 @@ class _LandingPageState extends State<LandingPage> {
   }
 
   @override
+  void dispose() {
+    _categoriesScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            SizedBox(height: 8),
-            if (widget.currentIndex == 1) _buildCategoriesList(),
-            Expanded(
-              child: widget.child,
+            Column(
+              children: [
+                SizedBox(height: 8),
+                if (widget.currentIndex == 1) ...[
+                  _buildCategoriesList(),
+                  _buildNewNewsIndicator(),
+                ],
+                Expanded(
+                  child: widget.child,
+                ),
+              ],
             ),
+            
+            // Modern refresh indicator - like Facebook/Instagram
+            if (_isRefreshing)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 20,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Refreshing',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

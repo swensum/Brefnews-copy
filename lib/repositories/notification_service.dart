@@ -31,35 +31,24 @@ class NotificationService {
 
   Future<void> _setupNotifications() async {
     try {
-      // REMOVE provisional: true to get immediate banner notifications
       NotificationSettings settings = await _firebaseMessaging.requestPermission(
-        alert: true,    // Enables banners and alerts
-        badge: true,    // Enables badge numbers
-        sound: true,    // Enables sound
-        // provisional: true, // REMOVED - this sends to notification center silently
+        alert: true,   
+        badge: true, 
+        sound: true, 
       );
       
       print('🔔 Notification permission: ${settings.authorizationStatus}');
-      
-      // Debug what permissions we actually got
       print('🔔 Alert permission: ${settings.alert}');
       print('🔔 Badge permission: ${settings.badge}');
       print('🔔 Sound permission: ${settings.sound}');
-      
-      // If we have provisional, request full permissions
       if (settings.authorizationStatus == AuthorizationStatus.provisional) {
         print('⚠️ Provisional permissions - requesting full permissions...');
         await _requestFullPermissions();
       }
 
-      // Get FCM token and handle it
       await _handleToken();
-
-      // Setup message handlers
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessage);
-      
-      // Token refresh - only save if different
       _firebaseMessaging.onTokenRefresh.listen((newToken) {
         print('🔄 Token refreshed: $newToken');
         _handleToken(newToken: newToken);
@@ -76,7 +65,6 @@ class NotificationService {
         alert: true,
         badge: true,
         sound: true,
-        // No provisional parameter
       );
       
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
@@ -96,10 +84,7 @@ class NotificationService {
         print('🔔 No FCM token available');
         return;
       }
-
       print('🔔 FCM Token: $token');
-
-      // Check if token is same as last saved one
       final prefs = await SharedPreferences.getInstance();
       final lastSavedToken = prefs.getString(_lastSavedTokenKey);
       
@@ -107,11 +92,7 @@ class NotificationService {
         print('🔄 Token unchanged, skipping save');
         return;
       }
-
-      // Save token to Supabase using UPSERT approach
       await _saveTokenToSupabase(token);
-      
-      // Update last saved token
       await prefs.setString(_lastSavedTokenKey, token);
       
     } catch (e) {
@@ -122,21 +103,20 @@ class NotificationService {
   Future<void> _saveTokenToSupabase(String token) async {
   try {
     print('💾 Saving FCM token to Supabase...');
-
-    // Simple upsert - only need fcm_token
-    final response = await _supabase.from('users_tokens').upsert({
+    await _supabase.from('users_tokens').insert({
       'fcm_token': token,
       'platform': await _getPlatform(),
       'created_at': DateTime.now().toIso8601String(),
-    }, onConflict: 'fcm_token');
+    });
 
-    if (response.error != null) {
-      print('❌ Database error: ${response.error}');
-    } else {
-      print('✅ Token saved successfully!');
-    }
+    print('✅ Token saved successfully!');
+    
   } catch (e) {
-    print('❌ Error saving token to Supabase: $e');
+    if (e.toString().contains('duplicate key') || e.toString().contains('23505')) {
+      print('🔄 Token already exists in database');
+    } else {
+      print('❌ Error saving token to Supabase: $e');
+    }
   }
 }
   Future<void> enableNotifications() async {
@@ -149,35 +129,27 @@ class NotificationService {
   Future<void> disableNotifications() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_notificationsEnabledKey, false);
-    
-    // Delete current token from Supabase
     final token = await _firebaseMessaging.getToken();
     if (token != null) {
       await _deleteTokenFromSupabase(token);
     }
-    
-    // Clear last saved token
     await prefs.remove(_lastSavedTokenKey);
     
     print('🔔 Notifications disabled');
   }
 
   Future<void> _deleteTokenFromSupabase(String token) async {
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user == null) return;
-
-      await _supabase
-          .from('users_tokens')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('fcm_token', token);
-          
-      print('🗑️ Token deleted from Supabase');
-    } catch (e) {
-      print('❌ Error deleting token: $e');
-    }
+  try {
+    await _supabase
+        .from('users_tokens')
+        .delete()
+        .eq('fcm_token', token);
+        
+    print('🗑️ Token deleted from Supabase');
+  } catch (e) {
+    print('⚠️ Token deletion completed (may not exist): $e');
   }
+}
 
   Future<bool> areNotificationsEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -194,14 +166,11 @@ class NotificationService {
     print('📱 Foreground message: ${message.notification?.title}');
     print('📱 Message data: ${message.data}');
     
-    // TODO: Show local notification or update UI
   }
 
   void _handleBackgroundMessage(RemoteMessage message) {
     print('📱 App opened from notification: ${message.notification?.title}');
     print('📱 Message data: ${message.data}');
-    
-    // TODO: Navigate to specific article using message.data['article_id']
   }
 
   Future<NotificationSettings> getNotificationSettings() async {

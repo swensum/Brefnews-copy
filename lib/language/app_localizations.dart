@@ -12,6 +12,11 @@ class AppLocalizations {
 
   static const Map<String, Map<String, String>> _localizedValues = {
     'en': {
+    'newNewsAvailable': 'New News Available',
+    'pullToRefresh': 'Pull to Refresh',
+    'noVideosAvailable': 'No Videos Available',
+    'checkBackLater': 'Check back later for new video content.',
+    'failedToLoadVideos': 'Failed to load videos',
        'allTopics': 'All Topics',
       'searchForNews': 'Search for news...',
   'searchResults': 'Search Results',
@@ -133,6 +138,11 @@ class AppLocalizations {
     'submitFeedback': 'Submit Feedback',
     },
     'hi': {
+       'newNewsAvailable': 'नई खबर उपलब्ध है',
+    'pullToRefresh': 'ताज़ा करने के लिए खींचें',
+      'noVideosAvailable': 'कोई वीडियो उपलब्ध नहीं है',
+    'checkBackLater': 'नए वीडियो सामग्री के लिए बाद में देखें।',
+    'failedToLoadVideos': 'वीडियो लोड करने में विफल',
         'allTopics': 'सभी विषय',
        'searchForNews': 'समाचार खोजें...',
   'searchResults': 'खोज परिणाम',
@@ -254,6 +264,11 @@ class AppLocalizations {
     'submitFeedback': 'प्रतिक्रिया सबमिट करें',
     },
     'es': {
+      'newNewsAvailable': 'Nuevas noticias disponibles',
+    'pullToRefresh': 'Tirar para refrescar',
+      'noVideosAvailable': 'No hay vídeos disponibles',
+    'checkBackLater': 'Vuelve más tarde para ver nuevo contenido de vídeo.',
+    'failedToLoadVideos': 'Error al cargar los vídeos',
       'allTopics': 'Todos los temas',
       'searchForNews': 'Buscar noticias...',
   'searchResults': 'Resultados de búsqueda',
@@ -376,6 +391,11 @@ class AppLocalizations {
     'submitFeedback': 'Enviar Comentarios',
     },
     'fr': {
+      'newNewsAvailable': 'Nouvelles disponibles',
+    'pullToRefresh': 'Tirer pour actualiser',
+      'noVideosAvailable': 'Aucune vidéo disponible',
+    'checkBackLater': 'Revenez plus tard pour du nouveau contenu vidéo.',
+    'failedToLoadVideos': 'Échec du chargement des vidéos',
       'allTopics': 'Tous les sujets',
        'searchForNews': 'Rechercher des actualités...',
   'searchResults': 'Résultats de recherche',
@@ -497,6 +517,11 @@ class AppLocalizations {
     'submitFeedback': 'Soumettre les Commentaires',
     },
     'ur': {
+       'newNewsAvailable': 'نئی خبریں دستیاب ہیں',
+    'pullToRefresh': 'تازہ کرنے کے لیے کھینچیں',
+      'noVideosAvailable': 'کوئی ویڈیوز دستیاب نہیں ہیں',
+    'checkBackLater': 'نئی ویڈیو مواد کے لیے بعد میں چیک کریں۔',
+    'failedToLoadVideos': 'ویڈیوز لوڈ کرنے میں ناکام',
        'allTopics': 'تمام موضوعات',
       'searchForNews': 'خبریں تلاش کریں...',
   'searchResults': 'تلاش کے نتائج',
@@ -618,6 +643,11 @@ class AppLocalizations {
     'submitFeedback': 'فیڈ بیک جمع کروائیں',
     },
     'zh': {
+       'newNewsAvailable': '有新新闻可用',
+    'pullToRefresh': '下拉刷新',
+      'noVideosAvailable': '没有可用的视频',
+    'checkBackLater': '请稍后查看新的视频内容。',
+    'failedToLoadVideos': '加载视频失败',
         'allTopics': '所有主题',
        'searchForNews': '搜索新闻...',
   'searchResults': '搜索结果',
@@ -739,6 +769,11 @@ class AppLocalizations {
     'submitFeedback': '提交反馈',
     },
     'ja': {
+       'newNewsAvailable': '新しいニュースがあります',
+    'pullToRefresh': '更新するには引き下げる',
+      'noVideosAvailable': '利用可能なビデオはありません',
+    'checkBackLater': '新しいビデオコンテンツについては後で確認してください。',
+    'failedToLoadVideos': 'ビデオの読み込みに失敗しました',
        'allTopics': 'すべてのトピック',
       'searchForNews': 'ニュースを検索...',
   'searchResults': '検索結果',
@@ -861,6 +896,16 @@ class AppLocalizations {
     'submitFeedback': 'フィードバックを送信',
     },
   };
+
+String get newNewsAvailable =>
+    _localizedValues[locale.languageCode]?['newNewsAvailable'] ?? 'New News Available';
+
+String get pullToRefresh =>
+    _localizedValues[locale.languageCode]?['pullToRefresh'] ?? 'Pull to Refresh';
+
+  String get noVideosAvailable => _localizedValues[locale.languageCode]?['noVideosAvailable'] ?? 'No Videos Available';
+String get checkBackLater => _localizedValues[locale.languageCode]?['checkBackLater'] ?? 'Check back later for new video content.';
+String get failedToLoadVideos => _localizedValues[locale.languageCode]?['failedToLoadVideos'] ?? 'Failed to load videos';
   String get allTopics => _localizedValues[locale.languageCode]?['allTopics'] ?? 'All Topics';
 
   String get searchForNews => _localizedValues[locale.languageCode]?['searchForNews'] ?? 'Search for news...';

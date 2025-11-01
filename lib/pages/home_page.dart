@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
-import '../component/feedbackdetail.dart';
+import '../component/timeline.dart';
 import '../language/app_localizations.dart';
 import '../provider/news_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:marvelous_carousel/marvelous_carousel.dart';
 import '../models/news_model.dart';
 import '../utilities/share_utils.dart';
+import 'video_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -20,10 +21,10 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
-  int _currentPage = 0; 
+  int _currentPage = 0;
   late AnimationController _slideController;
   late AnimationController _scaleController;
-  String? _previousCategory; 
+  String? _previousCategory;
 
   @override
   void initState() {
@@ -65,7 +66,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   Widget _buildNewsContent() {
     return Consumer<NewsProvider>(
       builder: (context, newsProvider, child) {
-        // Reset carousel to first article when category changes
         if (_previousCategory != newsProvider.selectedCategory) {
           _currentPage = 0; // Reset to first article
           _previousCategory = newsProvider.selectedCategory;
@@ -73,7 +73,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             '🟢 [HomePage] Category changed to ${newsProvider.selectedCategory}, resetting to first article',
           );
         }
-
+        if (newsProvider.selectedCategory == 'Timeline') {
+          return TimelinePage();
+        }
+        if (newsProvider.selectedCategory == 'Videos') {
+  return VideosPage();
+}
         if (newsProvider.selectedCategory == 'Bookmarks' &&
             newsProvider.news.isEmpty) {
           return _buildNoBookmarksWidget();
@@ -82,7 +87,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         if (newsProvider.isLoading) return _buildShimmerLoader();
         if (newsProvider.hasError) return _buildErrorWidget(newsProvider);
         if (newsProvider.news.isEmpty) return _buildEmptyWidget(newsProvider);
-
         return MarvelousCarousel(
           pagerType: PagerType.stack,
           margin: 8,
@@ -91,7 +95,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           dotsVisible: false,
           onPageChanged: (index) {
             setState(() {
-              _currentPage = index; 
+              _currentPage = index;
             });
           },
           children: newsProvider.news.asMap().entries.map((entry) {
@@ -130,14 +134,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         children: [
           Icon(
             Icons.bookmark_border,
-            color: Theme.of(context).colorScheme.outlineVariant, 
+            color: Theme.of(context).colorScheme.outlineVariant,
             size: screenHeight * 0.1,
           ),
           SizedBox(height: screenHeight * 0.02),
           Text(
             localizations.noBookmarksYet,
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onPrimary, 
+              color: Theme.of(context).colorScheme.onPrimary,
               fontSize: screenWidth * 0.05,
               fontWeight: FontWeight.w600,
             ),
@@ -145,18 +149,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           SizedBox(height: screenHeight * 0.01),
           Text(
             localizations.saveArticlesToReadLater,
-            style: TextStyle(color: Theme.of(context).colorScheme.outlineVariant, fontSize: screenWidth * 0.04),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.outlineVariant,
+              fontSize: screenWidth * 0.04,
+            ),
             textAlign: TextAlign.center,
           ),
           SizedBox(height: screenHeight * 0.03),
           ElevatedButton(
             onPressed: () {
-             
               context.go('/search');
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary, 
-              foregroundColor: Theme.of(context).colorScheme.onPrimary, 
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -191,7 +197,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   padding: EdgeInsets.all(screenWidth * 0.03),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.onPrimary, 
+                      color: Theme.of(context).colorScheme.onPrimary,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
@@ -204,13 +210,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     child: Column(
                       children: [
                         Shimmer.fromColors(
-                          baseColor: Theme.of(context).colorScheme.outline, 
+                          baseColor: Theme.of(context).colorScheme.outline,
                           highlightColor: Colors.grey[100]!,
                           child: Container(
                             height: MediaQuery.of(context).size.height * 0.3,
                             width: double.infinity,
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.outline, 
+                              color: Theme.of(context).colorScheme.outline,
                               borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(16),
                               ),
@@ -226,19 +232,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 Container(
                                   width: double.infinity,
                                   height: screenWidth * 0.05,
-                                  color: Theme.of(context).colorScheme.outline, 
+                                  color: Theme.of(context).colorScheme.outline,
                                 ),
                                 SizedBox(height: screenWidth * 0.03),
                                 Container(
                                   width: double.infinity,
                                   height: screenWidth * 0.04,
-                                  color:Theme.of(context).colorScheme.outline, 
+                                  color: Theme.of(context).colorScheme.outline,
                                 ),
                                 SizedBox(height: screenWidth * 0.02),
                                 Container(
                                   width: double.infinity,
                                   height: screenWidth * 0.04,
-                                  color: Theme.of(context).colorScheme.outline, 
+                                  color: Theme.of(context).colorScheme.outline,
                                 ),
                               ],
                             ),
@@ -265,14 +271,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         children: [
           Icon(
             Icons.error_outline,
-            color: Theme.of(context).colorScheme.outlineVariant, 
+            color: Theme.of(context).colorScheme.outlineVariant,
             size: screenHeight * 0.1,
           ),
           SizedBox(height: screenHeight * 0.02),
           Text(
             localizations.failedToLoadNews,
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onPrimary, 
+              color: Theme.of(context).colorScheme.onPrimary,
               fontSize: screenHeight * 0.025,
             ),
           ),
@@ -280,8 +286,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ElevatedButton(
             onPressed: newsProvider.loadNews,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary, 
-              foregroundColor: Theme.of(context).colorScheme.onPrimary, 
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -303,12 +309,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.article, color: Theme.of(context).colorScheme.outlineVariant,  size: screenHeight * 0.1),
+          Icon(
+            Icons.article,
+            color: Theme.of(context).colorScheme.outlineVariant,
+            size: screenHeight * 0.1,
+          ),
           SizedBox(height: screenHeight * 0.02),
           Text(
             localizations.noNewsAvailable,
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onPrimary, 
+              color: Theme.of(context).colorScheme.onPrimary,
               fontSize: screenHeight * 0.025,
             ),
           ),
@@ -316,7 +326,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           Text(
             localizations.checkBackLaterForUpdates,
             style: TextStyle(
-              color: Theme.of(context).colorScheme.outlineVariant, 
+              color: Theme.of(context).colorScheme.outlineVariant,
               fontSize: screenHeight * 0.018,
             ),
           ),
@@ -324,8 +334,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ElevatedButton(
             onPressed: newsProvider.loadNews,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary, 
-              foregroundColor: Theme.of(context).colorScheme.onPrimary, 
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -340,6 +350,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 }
+
 class _AnimatedShareIcon extends StatefulWidget {
   final VoidCallback onTap;
   final double size;
@@ -378,7 +389,9 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
         padding: EdgeInsets.all(widget.size * 0.2),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: _isTapped ? Colors.blue.withValues(alpha: 0.2) : Colors.transparent,
+          color: _isTapped
+              ? Colors.blue.withValues(alpha: 0.2)
+              : Colors.transparent,
         ),
         child: AnimatedScale(
           duration: const Duration(milliseconds: 200),
@@ -387,7 +400,9 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
           child: Icon(
             Icons.share,
             size: widget.size,
-            color: _isTapped ? Theme.of(context).colorScheme.primary:Theme.of(context).colorScheme.onSecondaryFixed,
+            color: _isTapped
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.onSecondaryFixed,
           ),
         ),
       ),
@@ -395,14 +410,13 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
   }
 }
 
-
 class _NewsCard extends StatelessWidget {
   final News news;
   final bool isActive;
   final String currentCategory;
-   final GlobalKey shareKey = GlobalKey();
+  final GlobalKey shareKey = GlobalKey();
 
-   _NewsCard({
+  _NewsCard({
     required this.news,
     required this.isActive,
     required this.currentCategory,
@@ -414,7 +428,6 @@ class _NewsCard extends StatelessWidget {
       context: context,
     );
   }
-
 
   Future<void> _launchUrl(BuildContext context) async {
     String rawUrl = news.sourceUrl.trim();
@@ -606,10 +619,10 @@ class _NewsCard extends StatelessWidget {
     );
   }
 
-  // ADD THREE-DOT MENU BUILDER
   Widget _buildThreeDotMenu(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final localizations = AppLocalizations.of(context)!;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -635,7 +648,6 @@ class _NewsCard extends StatelessWidget {
               ),
               onTap: () {
                 Navigator.pop(context);
-                // Handle share feedback functionality
                 _shareFeedbackOnShort(context);
               },
             ),
@@ -645,20 +657,20 @@ class _NewsCard extends StatelessWidget {
     );
   }
 
-  // ADD FEEDBACK METHOD
   void _shareFeedbackOnShort(BuildContext context) {
-    // Navigate to NewFeedbackPage with the news headline
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NewFeedbackPage(
-          onFeedbackSubmitted: (type, text, headline) {
-            // Handle feedback submission
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Then navigate to feedback page
+      context.push(
+        '/feedback-detail',
+        extra: {
+          'newsHeadline': news.title,
+          'onFeedbackSubmitted': (String type, String text, String headline) {
+            // Handle feedback submission callback if needed
+            print('Feedback submitted: $type - $text');
           },
-          newsHeadline: news.title, // Pass the news title as headline
-        ),
-      ),
-    );
+        },
+      );
+    });
   }
 
   @override
@@ -700,7 +712,7 @@ class _NewsCard extends StatelessWidget {
                             width: double.infinity,
                             height: maxImageHeight,
                             fit: BoxFit.cover,
-                            alignment: Alignment.topCenter,
+                            alignment: Alignment.topLeft,
                             loadingBuilder: (context, child, loadingProgress) {
                               if (loadingProgress == null) return child;
                               return Container(
@@ -710,9 +722,12 @@ class _NewsCard extends StatelessWidget {
                                 child: Center(
                                   child: CircularProgressIndicator(
                                     value:
-                                        loadingProgress.expectedTotalBytes != null
-                                        ? loadingProgress.cumulativeBytesLoaded /
-                                              loadingProgress.expectedTotalBytes!
+                                        loadingProgress.expectedTotalBytes !=
+                                            null
+                                        ? loadingProgress
+                                                  .cumulativeBytesLoaded /
+                                              loadingProgress
+                                                  .expectedTotalBytes!
                                         : null,
                                   ),
                                 ),
@@ -725,7 +740,9 @@ class _NewsCard extends StatelessWidget {
                                 color: Theme.of(context).colorScheme.outline,
                                 child: Icon(
                                   Icons.broken_image,
-                                  color: Theme.of(context).colorScheme.outlineVariant,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.outlineVariant,
                                   size: screenWidth * 0.12,
                                 ),
                               );
@@ -746,11 +763,11 @@ class _NewsCard extends StatelessWidget {
                       ),
                       child: Icon(
                         Icons.article,
-                        color:Theme.of(context).colorScheme.onPrimary,
+                        color: Theme.of(context).colorScheme.onPrimary,
                         size: screenWidth * 0.12,
                       ),
                     ),
-      
+
                   // ADD THREE DOTS MENU BUTTON - Top Right Corner
                   Positioned(
                     top: screenWidth * 0.02,
@@ -761,7 +778,7 @@ class _NewsCard extends StatelessWidget {
                         width: screenWidth * 0.08,
                         height: screenWidth * 0.08,
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha:  0.6),
+                          color: Colors.black.withValues(alpha: 0.6),
                           shape: BoxShape.circle,
                         ),
                         child: Row(
@@ -798,7 +815,7 @@ class _NewsCard extends StatelessWidget {
                       ),
                     ),
                   ),
-      
+
                   Positioned(
                     bottom: -screenWidth * 0.039,
                     left: screenWidth * 0.01,
@@ -821,7 +838,7 @@ class _NewsCard extends StatelessWidget {
                     ),
                   ),
                   Positioned(
-                    bottom: -screenWidth * 0.03,
+                    bottom: -screenWidth * 0.04,
                     right: 0,
                     child: Container(
                       padding: EdgeInsets.symmetric(
@@ -837,7 +854,9 @@ class _NewsCard extends StatelessWidget {
                         children: [
                           Consumer<NewsProvider>(
                             builder: (context, newsProvider, child) {
-                              bool isBookmarked = newsProvider.isBookmarked(news);
+                              bool isBookmarked = newsProvider.isBookmarked(
+                                news,
+                              );
                               return GestureDetector(
                                 onTap: () {
                                   newsProvider.toggleBookmark(news);
@@ -850,24 +869,25 @@ class _NewsCard extends StatelessWidget {
                                   size: screenWidth * 0.045,
                                   color: isBookmarked
                                       ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.onSecondaryFixed,
+                                      : Theme.of(
+                                          context,
+                                        ).colorScheme.onSecondaryFixed,
                                 ),
                               );
                             },
                           ),
                           SizedBox(width: screenWidth * 0.02),
                           _AnimatedShareIcon(
-                              onTap: () => _shareNewsCard(context),
-                              size: screenWidth * 0.045,
-                            ),
+                            onTap: () => _shareNewsCard(context),
+                            size: screenWidth * 0.045,
+                          ),
                         ],
                       ),
                     ),
                   ),
                 ],
               ),
-      
-             
+
               Expanded(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(
@@ -903,13 +923,15 @@ class _NewsCard extends StatelessWidget {
                               Text(
                                 news.summary,
                                 style: TextStyle(
-                                  color: Theme.of(context).textTheme.titleMedium?.color,
+                                  color: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium?.color,
                                   fontSize: screenWidth * 0.035,
                                   height: 1.4,
                                 ),
                               ),
                               SizedBox(height: screenHeight * 0.015),
-      
+
                               // Source and Time Info
                               Container(
                                 padding: EdgeInsets.symmetric(
@@ -923,7 +945,9 @@ class _NewsCard extends StatelessWidget {
                                       child: Text(
                                         news.source,
                                         style: TextStyle(
-                                          color: Theme.of(context).colorScheme.outlineVariant,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
                                           fontSize: screenWidth * 0.032,
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -931,25 +955,29 @@ class _NewsCard extends StatelessWidget {
                                         maxLines: 1,
                                       ),
                                     ),
-      
+
                                     SizedBox(width: screenWidth * 0.02),
-      
+
                                     // Dot separator
                                     Container(
                                       width: screenWidth * 0.01,
                                       height: screenWidth * 0.01,
                                       decoration: BoxDecoration(
-                                        color: Theme.of(context).colorScheme.outlineVariant,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outlineVariant,
                                         shape: BoxShape.circle,
                                       ),
                                     ),
                                     SizedBox(width: screenWidth * 0.02),
-      
+
                                     // Time - don't expand, just take needed space
                                     Text(
                                       news.timeAgo,
                                       style: TextStyle(
-                                        color: Theme.of(context).colorScheme.outlineVariant,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outlineVariant,
                                         fontSize: screenWidth * 0.032,
                                       ),
                                       overflow: TextOverflow.ellipsis,
@@ -981,7 +1009,7 @@ class _NewsCard extends StatelessWidget {
                             image: NetworkImage(news.imageUrl!),
                             fit: BoxFit.cover,
                             colorFilter: ColorFilter.mode(
-                              Colors.black.withValues(alpha:  0.6),
+                              Colors.black.withValues(alpha: 0.6),
                               BlendMode.darken,
                             ),
                           )
@@ -1009,7 +1037,7 @@ class _NewsCard extends StatelessWidget {
                             end: Alignment.bottomCenter,
                             colors: [
                               Colors.black.withValues(alpha: 0.0),
-                              Colors.black.withValues(alpha:  0.35),
+                              Colors.black.withValues(alpha: 0.35),
                             ],
                           ),
                         ),

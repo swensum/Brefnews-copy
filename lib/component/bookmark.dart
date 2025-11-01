@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:marvelous_carousel/marvelous_carousel.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,7 +9,7 @@ import '../language/app_localizations.dart';
 import '../provider/news_provider.dart';
 import '../models/news_model.dart';
 import '../utilities/share_utils.dart';
-import 'feedbackdetail.dart';
+
 
 class BookmarkPage extends StatefulWidget {
   final News? initialNews;
@@ -99,14 +100,14 @@ class _BookmarkPageState extends State<BookmarkPage> with TickerProviderStateMix
           style: TextStyle(
             color: Colors.white, 
             fontWeight: FontWeight.bold,
-            fontSize: screenWidth * 0.045, 
+            fontSize: screenWidth * 0.04, 
           ),
         ),
         centerTitle: false,
       ),
            body: Padding(
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).padding.bottom + screenHeight * 0.02,
+          bottom: MediaQuery.of(context).padding.bottom + screenHeight * 0.01,
         ),
         child: _buildBookmarkContent(),
       ),
@@ -399,58 +400,54 @@ final localizations = AppLocalizations.of(context)!;
 
   // ADD THREE-DOT MENU BUILDER
   Widget _buildThreeDotMenu(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-final localizations = AppLocalizations.of(context)!;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-        ),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Share Feedback on Short Option
-            ListTile(
-              leading: Icon(Icons.feedback, color: Colors.black87),
-              title: Text(
-                localizations.shareFeedbackOnShort,
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: screenWidth * 0.04,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                // Handle share feedback functionality
-                _shareFeedbackOnShort(context);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  final screenWidth = MediaQuery.of(context).size.width;
+  final localizations = AppLocalizations.of(context)!;
 
-  // ADD FEEDBACK METHOD
-  void _shareFeedbackOnShort(BuildContext context) {
-    // Navigate to NewFeedbackPage with the news headline
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NewFeedbackPage(
-          onFeedbackSubmitted: (type, text, headline) {
-            // Handle feedback submission
-          },
-          newsHeadline: news.title, // Pass the news title as headline
-        ),
+  return Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(16),
+        topRight: Radius.circular(16),
       ),
-    );
-  }
+    ),
+    child: SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Share Feedback on Short Option
+          ListTile(
+            leading: Icon(Icons.feedback, color: Colors.black87),
+            title: Text(
+              localizations.shareFeedbackOnShort,
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: screenWidth * 0.04,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              _shareFeedbackOnShort(context);
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}// ADD FEEDBACK METHOD
+  void _shareFeedbackOnShort(BuildContext context) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Then navigate to feedback page
+    context.push('/feedback-detail', extra: {
+      'newsHeadline': news.title,
+      'onFeedbackSubmitted': (String type, String text, String headline) {
+        // Handle feedback submission callback if needed
+        print('Feedback submitted: $type - $text');
+      }
+    });
+  });
+}
 
   @override
   Widget build(BuildContext context) {
@@ -461,7 +458,7 @@ final localizations = AppLocalizations.of(context)!;
     return RepaintBoundary(
       key: shareKey,
       child: Padding(
-        padding: EdgeInsets.all(screenWidth * 0.004),
+        padding: EdgeInsets.all(screenWidth * 0.001),
         child: Material(
            color: Colors.transparent,
           child: Container(
@@ -809,7 +806,7 @@ final localizations = AppLocalizations.of(context)!;
             width: double.infinity,
             height: maxImageHeight,
             fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
+            alignment: Alignment.topLeft,
             loadingBuilder: (context, child, loadingProgress) {
               if (loadingProgress == null) return child;
               return Container(

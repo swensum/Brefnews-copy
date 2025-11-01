@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 import '../language/app_localizations.dart';
-import 'feedbackdetail.dart';
+
 
 class FeedbackPage extends StatefulWidget {
   const FeedbackPage({super.key});
@@ -18,22 +20,38 @@ class _FeedbackPageState extends State<FeedbackPage> {
   @override
   void initState() {
     super.initState();
-    _loadFeedbacks();
+    _loadLocalFeedbacks();
   }
 
-  Future<void> _loadFeedbacks() async {
+  Future<void> _loadLocalFeedbacks() async {
     try {
-      final response = await Supabase.instance.client
-          .from('feedback')
-          .select()
-          .order('created_at', ascending: false);
+      final prefs = await SharedPreferences.getInstance();
+      final String? feedbacksJson = prefs.getString('user_feedbacks');
+      
+      List<Map<String, dynamic>> localFeedbacks = [];
+      
+      if (feedbacksJson != null && feedbacksJson.isNotEmpty) {
+        try {
+          final List<dynamic> parsedList = json.decode(feedbacksJson);
+          localFeedbacks = parsedList.map((item) => Map<String, dynamic>.from(item)).toList();
+        } catch (e) {
+          print('Error parsing local feedbacks: $e');
+        }
+      }
+      
+      // Sort by date (newest first)
+      localFeedbacks.sort((a, b) {
+        final dateA = DateTime.parse(a['created_at']);
+        final dateB = DateTime.parse(b['created_at']);
+        return dateB.compareTo(dateA);
+      });
 
       setState(() {
-        _feedbacks = List<Map<String, dynamic>>.from(response);
+        _feedbacks = localFeedbacks;
         _isLoading = false;
       });
     } catch (error) {
-      print('Error loading feedbacks: $error');
+      print('Error loading local feedbacks: $error');
       setState(() {
         _isLoading = false;
       });
@@ -44,7 +62,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-final localizations = AppLocalizations.of(context)!;
+    final localizations = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -82,23 +100,21 @@ final localizations = AppLocalizations.of(context)!;
                 vertical: screenHeight * 0.02,
               ),
               child: ElevatedButton(
-                onPressed: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NewFeedbackPage(
-                        onFeedbackSubmitted: (type, message, date) {
-                         
-                        },
-                      ),
-                    ),
-                  );
-        
-                 
-                  if (result != null && mounted) {
-                    _loadFeedbacks(); 
-                  }
-                },
+   onPressed: () async {
+    final result = await context.push('/feedback-detail', extra: {
+      'onFeedbackSubmitted': (String feedbackType, String feedbackText, String headline) {
+        print('Feedback submitted from Feedback Page:');
+        print('Type: $feedbackType');
+        print('Text: $feedbackText'); 
+        print('Headline: $headline');
+      },
+      // Don't include newsHeadline at all
+    });
+    
+    if (result != null && mounted) {
+      _loadLocalFeedbacks(); 
+    }
+  },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).colorScheme.primary,
                   foregroundColor: Theme.of(context).colorScheme.onPrimary,
@@ -269,7 +285,7 @@ final localizations = AppLocalizations.of(context)!;
                 
                 SizedBox(height: screenHeight * 0.015),
                 
-                // Date and Time at bottom right corner
+                
                 Align(
                   alignment: Alignment.bottomRight,
                   child: Text(

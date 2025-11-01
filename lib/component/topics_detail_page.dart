@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:marvelous_carousel/marvelous_carousel.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,7 +9,6 @@ import '../language/app_localizations.dart';
 import '../provider/news_provider.dart';
 import '../models/news_model.dart';
 import '../utilities/share_utils.dart';
-import 'feedbackdetail.dart';
 
 class TopicsDetailPage extends StatefulWidget {
   final Map<String, dynamic> topic;
@@ -32,7 +32,6 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
   List<News> _topicNews = [];
   bool _isInitialized = false;
   late String _topicName;
-  bool _isLoading = true;
 
   @override
   void initState() {
@@ -58,27 +57,17 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
 
   void _loadTopicNews() async {
     try {
-      setState(() {
-        _isLoading = true;
-      });
-      
       final newsProvider = Provider.of<NewsProvider>(context, listen: false);
       await newsProvider.fetchNewsByTopic(_topicName);
       
       if (mounted) {
         setState(() {
-          _topicNews = newsProvider.topicNews;
+          _topicNews = List<News>.from(newsProvider.topicNews);
           _sortNews();
-          _isLoading = false;
         });
       }
     } catch (e) {
       print('Error loading topic news: $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
   }
 
@@ -99,7 +88,11 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_isInitialized) {
-      _loadTopicNews();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _loadTopicNews();
+        }
+      });
     }
   }
 
@@ -128,14 +121,14 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: screenWidth * 0.045,
+            fontSize: screenWidth * 0.04,
           ),
         ),
         centerTitle: false,
       ),
       body: Padding(
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).padding.bottom + screenHeight * 0.02,
+          bottom: MediaQuery.of(context).padding.bottom + screenHeight * 0.01,
         ),
         child: _buildTopicContent(),
       ),
@@ -143,16 +136,23 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
   }
 
   Widget _buildTopicContent() {
-    if (_isLoading) {
-      return _buildLoadingIndicator();
-    }
-
     return Consumer<NewsProvider>(
       builder: (context, newsProvider, child) {
+        // Sync with provider data when it changes
+        if (_topicNews.length != newsProvider.topicNews.length) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _topicNews = List<News>.from(newsProvider.topicNews);
+                _sortNews();
+              });
+            }
+          });
+        }
+
         if (_topicNews.isEmpty) return _buildEmptyWidget();
         if (_topicNews.length == 1) {
           return _buildSingleNews(
-            newsProvider,
             _topicNews.first,
           );
         }
@@ -197,46 +197,7 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
     );
   }
 
-  Widget _buildLoadingIndicator() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-final localizations = AppLocalizations.of(context)!;
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: screenWidth * 0.15,
-            height: screenWidth * 0.15,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              backgroundColor: Colors.grey[800],
-            ),
-          ),
-          SizedBox(height: screenHeight * 0.03),
-          Text(
-            'Loading $_topicName news...',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: screenWidth * 0.04,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          SizedBox(height: screenHeight * 0.01),
-          Text(
-            localizations.pleaseWait,
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: screenWidth * 0.035,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSingleNews(NewsProvider newsProvider, News news) {
+  Widget _buildSingleNews(News news) {
     return Center(
       child: Padding(
         padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.001),
@@ -252,7 +213,7 @@ final localizations = AppLocalizations.of(context)!;
   Widget _buildEmptyWidget() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-final localizations = AppLocalizations.of(context)!;
+    final localizations = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -281,6 +242,7 @@ final localizations = AppLocalizations.of(context)!;
     );
   }
 }
+
 class _AnimatedShareIcon extends StatefulWidget {
   final VoidCallback onTap;
   final double size;
@@ -335,18 +297,20 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
     );
   }
 }
+
 class _TopicNewsCard extends StatelessWidget {
   final News news;
   final bool isActive;
   final bool isClickedNews;
-   final GlobalKey shareKey = GlobalKey();
+  final GlobalKey shareKey = GlobalKey();
 
-   _TopicNewsCard({
+  _TopicNewsCard({
     required this.news,
     required this.isActive,
     required this.isClickedNews,
   });
-   Future<void> _shareNewsCard(BuildContext context) async {
+
+  Future<void> _shareNewsCard(BuildContext context) async {
     await ShareUtils.shareNewsCard(
       globalKey: shareKey,
       news: news,
@@ -411,7 +375,7 @@ class _TopicNewsCard extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final overlayState = Overlay.of(context);
-final localizations = AppLocalizations.of(context)!;
+    final localizations = AppLocalizations.of(context)!;
     final overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
         bottom: screenHeight * 0.1,
@@ -449,7 +413,6 @@ final localizations = AppLocalizations.of(context)!;
     });
   }
 
-  // ADD THIS THREE-DOT MENU METHOD
   void _showThreeDotMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -458,10 +421,10 @@ final localizations = AppLocalizations.of(context)!;
     );
   }
 
-  // ADD THIS THREE-DOT MENU BUILDER
   Widget _buildThreeDotMenu(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-final localizations = AppLocalizations.of(context)!;
+    final localizations = AppLocalizations.of(context)!;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -487,7 +450,6 @@ final localizations = AppLocalizations.of(context)!;
               ),
               onTap: () {
                 Navigator.pop(context);
-                // Handle share feedback functionality
                 _shareFeedbackOnShort(context);
               },
             ),
@@ -497,20 +459,18 @@ final localizations = AppLocalizations.of(context)!;
     );
   }
 
-  // ADD THIS FEEDBACK METHOD
   void _shareFeedbackOnShort(BuildContext context) {
-    // Navigate to NewFeedbackPage with the news headline
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NewFeedbackPage(
-          onFeedbackSubmitted: (type, text, headline) {
-            // Handle feedback submission
-          },
-          newsHeadline: news.title, // Pass the news title as headline
-        ),
-      ),
-    );
+    // Close the bottom sheet first using a post-frame callback
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Then navigate to feedback page
+      context.push('/feedback-detail', extra: {
+        'newsHeadline': news.title,
+        'onFeedbackSubmitted': (String type, String text, String headline) {
+          // Handle feedback submission callback if needed
+          print('Feedback submitted: $type - $text');
+        }
+      });
+    });
   }
 
   @override
@@ -520,11 +480,11 @@ final localizations = AppLocalizations.of(context)!;
     final maxImageHeight = screenHeight * 0.35;
 
     return RepaintBoundary(
-       key: shareKey,
+      key: shareKey,
       child: Padding(
-        padding: EdgeInsets.all(screenWidth * 0.004),
+        padding: EdgeInsets.all(screenWidth * 0.001),
         child: Material(
-           color: Colors.transparent,
+          color: Colors.transparent,
           child: Container(
             decoration: BoxDecoration(
               color: Theme.of(context).scaffoldBackgroundColor,
@@ -542,8 +502,6 @@ final localizations = AppLocalizations.of(context)!;
                       _buildNewsImage(context, maxImageHeight)
                     else
                       _buildPlaceholderImage(maxImageHeight, screenWidth),
-      
-                    // ADD THREE DOTS MENU BUTTON - Top Right Corner
                     Positioned(
                       top: screenWidth * 0.02,
                       right: screenWidth * 0.02,
@@ -590,8 +548,6 @@ final localizations = AppLocalizations.of(context)!;
                         ),
                       ),
                     ),
-      
-                    // Logo - Same as NotificationPage
                     Positioned(
                       bottom: -screenWidth * 0.039,
                       left: screenWidth * 0.01,
@@ -605,7 +561,7 @@ final localizations = AppLocalizations.of(context)!;
                           borderRadius: BorderRadius.circular(16),
                           child: Image.asset(
                             'assets/brefnews.png',
-                             color: Theme.of(context).colorScheme.onSurface,
+                            color: Theme.of(context).colorScheme.onSurface,
                             width: screenWidth * 0.25,
                             height: screenWidth * 0.08,
                             fit: BoxFit.cover,
@@ -613,8 +569,7 @@ final localizations = AppLocalizations.of(context)!;
                         ),
                       ),
                     ),
-      
-                    // Action Buttons - Same as NotificationPage
+                   
                     Positioned(
                       bottom: -screenWidth * 0.03,
                       right: 0,
@@ -648,116 +603,115 @@ final localizations = AppLocalizations.of(context)!;
                               },
                             ),
                             SizedBox(width: screenWidth * 0.02),
-                           _AnimatedShareIcon(
-                                onTap: () => _shareNewsCard(context),
-                                size: screenWidth * 0.045,
-                              ),
+                            _AnimatedShareIcon(
+                              onTap: () => _shareNewsCard(context),
+                              size: screenWidth * 0.045,
+                            ),
                           ],
                         ),
                       ),
                     ),
                   ],
                 ),
-      
-                // Content Section - Same as NotificationPage
+                
                 Expanded(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    screenWidth * 0.04,
-                    screenHeight * 0.02,
-                    screenWidth * 0.04,
-                    screenHeight * 0.015,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title
-                      Text(
-                        news.title,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontSize: screenWidth * 0.043,
-                          fontWeight: FontWeight.bold,
-                          height: 1.3,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      screenWidth * 0.04,
+                      screenHeight * 0.02,
+                      screenWidth * 0.04,
+                      screenHeight * 0.015,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title
+                        Text(
+                          news.title,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: screenWidth * 0.043,
+                            fontWeight: FontWeight.bold,
+                            height: 1.3,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      SizedBox(height: screenHeight * 0.01),
-                      Flexible(
-                        fit: FlexFit.loose,
-                        child: SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Summary Text
-                              Text(
-                                news.summary,
-                                style: TextStyle(
-                                  color: Theme.of(context).textTheme.titleMedium?.color,
-                                  fontSize: screenWidth * 0.035,
-                                  height: 1.4,
+                        SizedBox(height: screenHeight * 0.01),
+                        Flexible(
+                          fit: FlexFit.loose,
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Summary Text
+                                Text(
+                                  news.summary,
+                                  style: TextStyle(
+                                    color: Theme.of(context).textTheme.titleMedium?.color,
+                                    fontSize: screenWidth * 0.035,
+                                    height: 1.4,
+                                  ),
                                 ),
-                              ),
-                              SizedBox(height: screenHeight * 0.015),
-      
-                              // Source and Time Info
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  vertical: screenHeight * 0.008,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: [
-                                    // Source
-                                    Flexible(
-                                      child: Text(
-                                        news.source,
+                                SizedBox(height: screenHeight * 0.015),
+
+                                // Source and Time Info
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: screenHeight * 0.008,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    children: [
+                                      // Source
+                                      Flexible(
+                                        child: Text(
+                                          news.source,
+                                          style: TextStyle(
+                                            color: Theme.of(context).colorScheme.outlineVariant,
+                                            fontSize: screenWidth * 0.032,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ),
+
+                                      SizedBox(width: screenWidth * 0.02),
+
+                                      // Dot separator
+                                      Container(
+                                        width: screenWidth * 0.01,
+                                        height: screenWidth * 0.01,
+                                        decoration:  BoxDecoration(
+                                          color: Theme.of(context).colorScheme.outlineVariant,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      SizedBox(width: screenWidth * 0.02),
+
+                                      // Time - don't expand, just take needed space
+                                      Text(
+                                        news.timeAgo,
                                         style: TextStyle(
                                           color: Theme.of(context).colorScheme.outlineVariant,
                                           fontSize: screenWidth * 0.032,
-                                          fontWeight: FontWeight.w500,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,
                                       ),
-                                    ),
-      
-                                    SizedBox(width: screenWidth * 0.02),
-      
-                                    // Dot separator
-                                    Container(
-                                      width: screenWidth * 0.01,
-                                      height: screenWidth * 0.01,
-                                      decoration:  BoxDecoration(
-                                        color: Theme.of(context).colorScheme.outlineVariant,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    SizedBox(width: screenWidth * 0.02),
-      
-                                    // Time - don't expand, just take needed space
-                                    Text(
-                                      news.timeAgo,
-                                      style: TextStyle(
-                                        color: Theme.of(context).colorScheme.outlineVariant,
-                                        fontSize: screenWidth * 0.032,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
                 // Headline section - takes full width (Same as NotificationPage)
                 GestureDetector(
                   onTap: () => _launchUrl(context),
@@ -861,7 +815,7 @@ final localizations = AppLocalizations.of(context)!;
             width: double.infinity,
             height: maxImageHeight,
             fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
+            alignment: Alignment.topLeft,
             loadingBuilder: (context, child, loadingProgress) {
               if (loadingProgress == null) return child;
               return Container(
@@ -1012,7 +966,7 @@ class _ImagePreviewDialog extends StatelessWidget {
                   ),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                   textAlign: TextAlign.left,
+                  textAlign: TextAlign.left,
                 ),
               ),
             ),

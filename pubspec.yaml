@@ -34,6 +34,8 @@ dependencies:
     sdk: flutter
   share_plus: ^12.0.1
   path_provider: ^2.1.5
+  video_player: ^2.10.0
+  chewie: ^1.13.0
   
   
   
@@ -55,6 +57,7 @@ flutter_launcher_icons:
 flutter:
   assets:
     - assets/brefnews.png
+    - assets/timelines.png
     - .env
 
   
