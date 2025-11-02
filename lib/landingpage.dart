@@ -21,15 +21,19 @@ class LandingPage extends StatefulWidget {
 
 class _LandingPageState extends State<LandingPage> {
   final ScrollController _categoriesScrollController = ScrollController();
-  bool _showNewNewsIndicator = false;
-  int _newNewsCount = 0;
+  final bool _showNewNewsIndicator = false;
   int _lastNewsCount = 0;
   bool _isRefreshing = false;
   int _lastHomeTapTime = 0;
+  DateTime? _lastCheckTime;
+  int _monitoringCycle = 0;
+  OverlayEntry? _overlayEntry;
 
   @override
   void initState() {
     super.initState();
+    
+    print('🟢 [LandingPage] initState called');
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToSelectedCategory();
@@ -40,69 +44,185 @@ class _LandingPageState extends State<LandingPage> {
   void _initializeNewsMonitoring() {
     final newsProvider = Provider.of<NewsProvider>(context, listen: false);
     _lastNewsCount = newsProvider.allNews.length;
+    _lastCheckTime = DateTime.now();
+    
+    print('🟢 [NewsMonitor] Initialized - Last count: $_lastNewsCount, Time: $_lastCheckTime');
+    
     _startNewsMonitoring();
   }
 
   void _startNewsMonitoring() {
+    _monitoringCycle++;
+    print('🟢 [NewsMonitor] Starting cycle $_monitoringCycle at ${DateTime.now()}');
+    
     // Check for new news every 2 minutes
     Future.delayed(Duration(minutes: 2), () {
       if (mounted) {
+        print('🟢 [NewsMonitor] 2 minutes elapsed, checking for new news...');
         _checkForNewNews();
+      } else {
+        print('🔴 [NewsMonitor] Widget not mounted, skipping check');
       }
     });
   }
 
-  void _checkForNewNews() {
+  Future<void> _checkForNewNews() async {
     final newsProvider = Provider.of<NewsProvider>(context, listen: false);
-    final currentCount = newsProvider.allNews.length;
+    final currentTime = DateTime.now();
     
-    if (currentCount > _lastNewsCount && widget.currentIndex == 1) {
-      final newCount = currentCount - _lastNewsCount;
-      _showNewNewsIndicator = true;
-      _newNewsCount = newCount;
-      _lastNewsCount = currentCount;
+    print('🟢 [NewsMonitor] Checking at $currentTime');
+    print('🟢 [NewsMonitor] Last count: $_lastNewsCount');
+    print('🟢 [NewsMonitor] Current page index: ${widget.currentIndex}, Is home page: ${widget.currentIndex == 1}');
+    print('🟢 [NewsMonitor] Banner currently showing: $_showNewNewsIndicator');
+    
+    try {
+      print('🟢 [NewsMonitor] 🔄 FETCHING FRESH DATA FROM SERVER...');
       
-      if (mounted) {
-        setState(() {});
+      // Actually fetch new data from server
+      await newsProvider.refreshNews();
+      
+      // Give it a moment to update the provider state
+      await Future.delayed(Duration(milliseconds: 500));
+      
+      final currentCount = newsProvider.allNews.length;
+      print('🟢 [NewsMonitor] Fresh data fetched - Current count: $currentCount');
+      
+      if (currentCount > _lastNewsCount && widget.currentIndex == 1) {
+        final newCount = currentCount - _lastNewsCount;
+        print('🟢 [NewsMonitor] 🎉 NEW NEWS DETECTED! Count increased by $newCount');
+        
+        _showModernPopDown('News updated');
+        _lastNewsCount = currentCount;
+        
+        // Auto hide after 3 seconds
+        Future.delayed(Duration(seconds: 3), () {
+          _hideModernPopDown();
+        });
+      } else {
+        if (currentCount <= _lastNewsCount) {
+          print('🟢 [NewsMonitor] No new news - count unchanged or decreased');
+        } else {
+          print('🟢 [NewsMonitor] New news detected but not on home page');
+        }
+        
+        // Update last count even if no new news
+        _lastNewsCount = currentCount;
       }
       
-      // Auto hide after 8 seconds
-      Future.delayed(Duration(seconds: 8), () {
-        if (mounted && _showNewNewsIndicator) {
-          setState(() {
-            _showNewNewsIndicator = false;
-          });
-        }
-      });
+    } catch (e) {
+      print('🔴 [NewsMonitor] Error fetching fresh data: $e');
     }
     
+    _lastCheckTime = currentTime;
+    print('🟢 [NewsMonitor] Check completed, starting next cycle');
     _startNewsMonitoring();
+  }
+
+  void _showModernPopDown(String message) {
+    // Remove existing overlay if any
+    _hideModernPopDown();
+    
+    final overlayState = Overlay.of(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).padding.top + 10,
+        left: screenWidth * 0.1,
+        right: screenWidth * 0.1,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: screenWidth * 0.04,
+              vertical: screenHeight * 0.015,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: Colors.green,
+                  size: screenWidth * 0.05,
+                ),
+                SizedBox(width: screenWidth * 0.02),
+                Text(
+                  message,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: screenWidth * 0.035,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    
+    overlayState.insert(_overlayEntry!);
+  }
+
+  void _hideModernPopDown() {
+    if (_overlayEntry != null) {
+      _overlayEntry!.remove();
+      _overlayEntry = null;
+    }
   }
 
   Future<void> _handleRefresh() async {
     if (_isRefreshing) return;
     
+    print('🟢 [Refresh] Manual refresh triggered');
+    
+    _showModernPopDown('Refreshing...');
+    
     setState(() {
       _isRefreshing = true;
-      _showNewNewsIndicator = false;
     });
 
     final newsProvider = Provider.of<NewsProvider>(context, listen: false);
     
     try {
-      newsProvider.refreshNews();
+      print('🟢 [Refresh] Calling newsProvider.refreshNews()');
+      await newsProvider.refreshNews();
       
-      // Wait for refresh to complete
-      await Future.delayed(Duration(seconds: 2));
-      
+      // Update the count after refresh
       _lastNewsCount = newsProvider.allNews.length;
+      
+      // Show success message
+      _hideModernPopDown();
+      _showModernPopDown('News updated');
+      
+      print('🟢 [Refresh] Refresh completed - new count: $_lastNewsCount');
     } catch (e) {
-      // Silent fail - no snackbar
+      print('🔴 [Refresh] Error during refresh: $e');
+      _hideModernPopDown();
+      _showModernPopDown('Update failed');
     } finally {
+      Future.delayed(Duration(seconds: 2), () {
+        _hideModernPopDown();
+      });
+      
       if (mounted) {
         setState(() {
           _isRefreshing = false;
         });
+        print('🟢 [Refresh] Refresh state reset');
       }
     }
   }
@@ -110,11 +230,16 @@ class _LandingPageState extends State<LandingPage> {
   void _onBottomNavTap(int index) {
     final currentTime = DateTime.now().millisecondsSinceEpoch;
     
+    print('🟢 [Nav] Bottom nav tapped - index: $index, current index: ${widget.currentIndex}');
+    
     // If user taps home icon while already on home page, refresh news
     if (index == 1 && widget.currentIndex == 1) {
       // Check if it's a quick double-tap (within 500ms)
       if (currentTime - _lastHomeTapTime < 500) {
+        print('🟢 [Nav] Home double-tap detected, triggering refresh');
         _handleRefresh();
+      } else {
+        print('🟢 [Nav] Single home tap, no refresh');
       }
       _lastHomeTapTime = currentTime;
     }
@@ -215,14 +340,9 @@ class _LandingPageState extends State<LandingPage> {
     
     final englishCategory = _mapToEnglishCategory(category, context);
     
-    final localizations = AppLocalizations.of(context);
+    AppLocalizations.of(context);
     if (englishCategory == 'Bookmarks' && !newsProvider.hasBookmarks) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(localizations?.signInToSave ?? 'No bookmarks yet! Save some articles first.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _showModernPopDown('No bookmarks yet');
       return;
     }
     
@@ -230,87 +350,6 @@ class _LandingPageState extends State<LandingPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToSelectedCategory();
     });
-  }
-
-  Widget _buildNewNewsIndicator() {
-    if (!_showNewNewsIndicator) return SizedBox.shrink();
-    
-    final screenWidth = MediaQuery.of(context).size.width;
-    final localizations = AppLocalizations.of(context);
-    
-    return GestureDetector(
-      onTap: _handleRefresh,
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(
-          horizontal: screenWidth * 0.04,
-          vertical: screenWidth * 0.025,
-        ),
-        margin: EdgeInsets.symmetric(
-          horizontal: screenWidth * 0.04,
-          vertical: screenWidth * 0.015,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.blue.shade50,
-          borderRadius: BorderRadius.circular(screenWidth * 0.03),
-          border: Border.all(color: Colors.blue.shade200, width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: screenWidth * 0.02,
-              spreadRadius: screenWidth * 0.005,
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(screenWidth * 0.015),
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.new_releases,
-                    color: Colors.white,
-                    size: screenWidth * 0.045,
-                  ),
-                ),
-                SizedBox(width: screenWidth * 0.03),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$_newNewsCount ${localizations?.newNewsAvailable ?? 'New News Available'}',
-                      style: TextStyle(
-                        color: Colors.blue.shade800,
-                        fontSize: screenWidth * 0.038,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'Tap to refresh',
-                      style: TextStyle(
-                        color: Colors.blue.shade600,
-                        fontSize: screenWidth * 0.03,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            Icon(
-              Icons.refresh,
-              color: Colors.blue.shade600,
-              size: screenWidth * 0.05,
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildCategoriesList() {
@@ -364,68 +403,27 @@ class _LandingPageState extends State<LandingPage> {
 
   @override
   void dispose() {
+    print('🟢 [LandingPage] dispose called');
+    _hideModernPopDown();
     _categoriesScrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    print('🟢 [LandingPage] build called - Refreshing: $_isRefreshing');
+    
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Stack(
+        child: Column(
           children: [
-            Column(
-              children: [
-                SizedBox(height: 8),
-                if (widget.currentIndex == 1) ...[
-                  _buildCategoriesList(),
-                  _buildNewNewsIndicator(),
-                ],
-                Expanded(
-                  child: widget.child,
-                ),
-              ],
+            SizedBox(height: 8),
+            if (widget.currentIndex == 1) 
+              _buildCategoriesList(),
+            Expanded(
+              child: widget.child,
             ),
-            
-            // Modern refresh indicator - like Facebook/Instagram
-            if (_isRefreshing)
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 20,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Refreshing',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
