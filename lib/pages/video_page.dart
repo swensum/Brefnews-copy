@@ -34,6 +34,7 @@ class _VideosPageState extends State<VideosPage> {
   
   // Volume state
   bool _isMuted = false;
+  bool _isDisposing = false;
 
   @override
   void initState() {
@@ -47,11 +48,18 @@ class _VideosPageState extends State<VideosPage> {
 
   @override
   void dispose() {
+    _isDisposing = true;
     _autoPlayTimer?.cancel();
-    _videoController?.removeListener(_videoListener);
-    _videoController?.dispose();
-    _chewieController?.dispose();
+    _disposeVideoControllers();
     super.dispose();
+  }
+
+  void _disposeVideoControllers() {
+    _videoController?.removeListener(_videoListener);
+    _chewieController?.dispose();
+    _chewieController = null;
+    _videoController?.dispose();
+    _videoController = null;
   }
 
   String? _getVideoUrlFromModel(VideoArticle video) {
@@ -62,7 +70,7 @@ class _VideosPageState extends State<VideosPage> {
   }
 
   void _videoListener() {
-    if (_videoController != null && mounted) {
+    if (_videoController != null && mounted && !_isDisposing) {
       setState(() {
         _currentPosition = _videoController!.value.position;
         _totalDuration = _videoController!.value.duration;
@@ -71,30 +79,41 @@ class _VideosPageState extends State<VideosPage> {
   }
 
   Future<void> _initializeVideoPlayer(int index, VideoArticle video) async {
-    _videoController?.removeListener(_videoListener);
-    _videoController?.dispose();
-    _chewieController?.dispose();
+    // Don't initialize if disposing or same video is already playing
+    if (_isDisposing || !mounted || _currentVideoIndex == index) return;
+
+    // Clean up previous controllers
+    _disposeVideoControllers();
 
     try {
       String? videoUrl = _getVideoUrlFromModel(video);
       
       if (videoUrl == null || videoUrl.isEmpty) {
-        setState(() {
-          _currentVideoIndex = index;
-        });
+        if (mounted) {
+          setState(() {
+            _currentVideoIndex = index;
+          });
+        }
         return;
       }
       
-     _videoController = VideoPlayerController.networkUrl(
-  Uri.parse(videoUrl),
-);
-      await _videoController!.initialize().then((_) {
-        _videoController!.setLooping(false);
-        _videoController!.setVolume(_isMuted ? 0.0 : 1.0);
-      });
-
+      // Create new controller
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+      
+      // Initialize the controller
+      await _videoController!.initialize();
+      
+      // Only proceed if still mounted and not disposing
+      if (!mounted || _isDisposing) {
+        await _videoController?.dispose();
+        return;
+      }
+      
+      _videoController!.setLooping(false);
+      _videoController!.setVolume(_isMuted ? 0.0 : 1.0);
       _videoController!.addListener(_videoListener);
 
+      // Create Chewie controller
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
         autoPlay: true,
@@ -141,27 +160,37 @@ class _VideosPageState extends State<VideosPage> {
         },
       );
 
-      setState(() {
-        _currentVideoIndex = index;
-        _currentPosition = Duration.zero;
-        _totalDuration = _videoController!.value.duration;
-      });
+      if (mounted) {
+        setState(() {
+          _currentVideoIndex = index;
+          _currentPosition = Duration.zero;
+          _totalDuration = _videoController!.value.duration;
+        });
+      }
+
+      // Start playing
+      _videoController!.play();
 
     } catch (e) {
-      setState(() {
-        _currentVideoIndex = index;
-      });
+      print('Video initialization error: $e');
+      if (mounted) {
+        setState(() {
+          _currentVideoIndex = index;
+        });
+      }
+      // Dispose controllers on error
+      _disposeVideoControllers();
     }
   }
 
   void _toggleVideoPlayback() {
-    if (_videoController != null) {
+    if (_videoController != null && mounted && !_isDisposing) {
       if (_videoController!.value.isPlaying) {
         _videoController!.pause();
       } else {
         _videoController!.play();
       }
-    } else if (_currentVideoIndex != null) {
+    } else if (_currentVideoIndex != null && mounted) {
       final newsProvider = Provider.of<NewsProvider>(context, listen: false);
       if (_currentVideoIndex! < newsProvider.videos.length) {
         _initializeVideoPlayer(_currentVideoIndex!, newsProvider.videos[_currentVideoIndex!]);
@@ -170,7 +199,7 @@ class _VideosPageState extends State<VideosPage> {
   }
 
   void _toggleMute() {
-    if (_videoController != null) {
+    if (_videoController != null && mounted && !_isDisposing) {
       setState(() {
         _isMuted = !_isMuted;
         _videoController!.setVolume(_isMuted ? 0.0 : 1.0);
@@ -181,18 +210,18 @@ class _VideosPageState extends State<VideosPage> {
   void _handleAutoPlay(bool isActive, VideoArticle video, int index) {
     _autoPlayTimer?.cancel();
 
-    if (isActive && _currentVideoIndex != index) {
-      _autoPlayTimer = Timer(const Duration(milliseconds: 300), () {
-        if (!mounted) return;
+    if (isActive && _currentVideoIndex != index && mounted) {
+      _autoPlayTimer = Timer(const Duration(milliseconds: 100), () {
+        if (!mounted || _isDisposing) return;
         if (_currentPage == index) {
           _initializeVideoPlayer(index, video);
           _lastActiveIndex = index;
           _isFirstLoad = false;
         }
       });
-    } else if (!isActive && _currentVideoIndex == index) {
+    } else if (!isActive && _currentVideoIndex == index && mounted) {
       _autoPlayTimer = Timer(const Duration(milliseconds: 200), () {
-        if (!mounted) return;
+        if (!mounted || _isDisposing) return;
         if (_videoController != null && _videoController!.value.isPlaying) {
           _videoController!.pause();
         }
@@ -207,35 +236,41 @@ class _VideosPageState extends State<VideosPage> {
     
     _autoPlayTimer?.cancel();
     
-    setState(() {
-      _currentPage = index;
-      _lastActiveIndex = null;
-    });
+    if (mounted) {
+      setState(() {
+        _currentPage = index;
+        _lastActiveIndex = null;
+      });
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _autoPlayTimer = Timer(const Duration(milliseconds: 400), () {
-        if (mounted && _currentPage == index) {
-          final newsProvider = Provider.of<NewsProvider>(context, listen: false);
-          if (index < newsProvider.videos.length) {
-            _initializeVideoPlayer(index, newsProvider.videos[index]);
+      if (mounted && !_isDisposing) {
+        _autoPlayTimer = Timer(const Duration(milliseconds: 200), () {
+          if (mounted && !_isDisposing && _currentPage == index) {
+            final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+            if (index < newsProvider.videos.length) {
+              _initializeVideoPlayer(index, newsProvider.videos[index]);
+            }
           }
-        }
-      });
+        });
+      }
     });
   }
 
   void _handleInitialAutoPlay() {
-    if (_isFirstLoad && _currentPage == 0 && _currentVideoIndex == null) {
+    if (_isFirstLoad && _currentPage == 0 && _currentVideoIndex == null && mounted) {
       _isFirstLoad = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _autoPlayTimer = Timer(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            final newsProvider = Provider.of<NewsProvider>(context, listen: false);
-            if (newsProvider.videos.isNotEmpty) {
-              _initializeVideoPlayer(0, newsProvider.videos[0]);
+        if (mounted && !_isDisposing) {
+          _autoPlayTimer = Timer(const Duration(milliseconds: 300), () {
+            if (mounted && !_isDisposing) {
+              final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+              if (newsProvider.videos.isNotEmpty) {
+                _initializeVideoPlayer(0, newsProvider.videos[0]);
+              }
             }
-          }
-        });
+          });
+        }
       });
     }
   }
@@ -249,12 +284,10 @@ class _VideosPageState extends State<VideosPage> {
     final Uri videoUrl = Uri.parse(rawUrl);
 
     try {
-      
       final launched = await launchUrl(videoUrl, mode: LaunchMode.platformDefault);
       
       if (!launched) {
-    if (!mounted) return;
-        
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Could not launch $rawUrl"),
@@ -263,28 +296,26 @@ class _VideosPageState extends State<VideosPage> {
         );
       }
     } catch (e) {
-     if (!mounted) return;
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error opening video: $e"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error opening video: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
-  
+  }
 
   void _onShareVideo(VideoArticle video) {
-  final translatedTitle = video.getTranslatedTitle(context);
-  final translatedSourceName = video.getTranslatedSourceName(context);
-  final shareText = _buildVideoShareText(video, translatedTitle, translatedSourceName);
-  // ignore: deprecated_member_use
-  Share.share(shareText, subject: translatedTitle);
-}
+    final translatedTitle = video.getTranslatedTitle(context);
+    final translatedSourceName = video.getTranslatedSourceName(context);
+    final shareText = _buildVideoShareText(video, translatedTitle, translatedSourceName);
+    // ignore: deprecated_member_use
+    Share.share(shareText, subject: translatedTitle);
+  }
 
-String _buildVideoShareText(VideoArticle video, String translatedTitle, String translatedSourceName) {
-  return """
+  String _buildVideoShareText(VideoArticle video, String translatedTitle, String translatedSourceName) {
+    return """
 🎬 $translatedTitle
 
 📺 Source: $translatedSourceName
@@ -294,9 +325,8 @@ String _buildVideoShareText(VideoArticle video, String translatedTitle, String t
 
 📲 Shared via BrefNews
 Download the app for video news updates!
-    """
-        .trim();
-}
+    """.trim();
+  }
 
   Widget _buildVideoProgressBar() {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -312,7 +342,7 @@ Download the app for video news updates!
           GestureDetector(
             onTapDown: (details) {
               final box = context.findRenderObject() as RenderBox?;
-              if (box != null && _videoController != null) {
+              if (box != null && _videoController != null && mounted && !_isDisposing) {
                 final localPosition = box.globalToLocal(details.globalPosition);
                 final progressWidth = box.size.width;
                 final relativePosition = localPosition.dx.clamp(0.0, progressWidth);
@@ -391,7 +421,7 @@ Download the app for video news updates!
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    if (isActive && _lastActiveIndex != index) {
+    if (isActive && _lastActiveIndex != index && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _handleAutoPlay(isActive, video, index);
       });
@@ -411,7 +441,8 @@ Download the app for video news updates!
           ),
           child: Stack(
             children: [
-              if (isActive && _currentVideoIndex == index && _chewieController != null)
+              // Video player or placeholder
+              if (isActive && _currentVideoIndex == index && _chewieController != null && mounted && !_isDisposing)
                 SizedBox(
                   width: double.infinity,
                   height: double.infinity,
@@ -448,6 +479,7 @@ Download the app for video news updates!
                   ),
                 ),
 
+              // Gradient overlay
               Positioned(
                 bottom: 0,
                 left: 0,
@@ -472,6 +504,7 @@ Download the app for video news updates!
                 ),
               ),
 
+              // Video info
               Positioned(
                 left: screenWidth * 0.05,
                 right: screenWidth * 0.05,
@@ -511,7 +544,7 @@ Download the app for video news updates!
                           ),
                         Expanded(
                           child: Text(
-                          video.getTranslatedSourceName(context),
+                            video.getTranslatedSourceName(context),
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: screenWidth * 0.04,
@@ -526,7 +559,7 @@ Download the app for video news updates!
                     ),
                     SizedBox(height: screenHeight * 0.008),
                     Text(
-                       video.getTranslatedTitle(context),
+                      video.getTranslatedTitle(context),
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: screenWidth * 0.043,
@@ -551,7 +584,7 @@ Download the app for video news updates!
                         GestureDetector(
                           onTap: () => _launchVideoUrl(video.platformUrl),
                           child: Text(
-                             video.getTranslatedPlatformName(context), 
+                            video.getTranslatedPlatformName(context), 
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: screenWidth * 0.034,
@@ -567,6 +600,7 @@ Download the app for video news updates!
                 ),
               ),
 
+              // Controls
               Positioned(
                 top: screenHeight * 0.03,
                 right: screenWidth * 0.04,
@@ -607,7 +641,8 @@ Download the app for video news updates!
                 ),
               ),
 
-              if (isActive && _currentVideoIndex == index)
+              // Progress bar
+              if (isActive && _currentVideoIndex == index && mounted)
                 Positioned(
                   bottom: screenHeight * 0,
                   left: 0,
@@ -615,10 +650,13 @@ Download the app for video news updates!
                   child: _buildVideoProgressBar(),
                 ),
 
+              // Play overlay when paused
               if (isActive && 
                   _currentVideoIndex == index && 
                   _videoController != null && 
-                  !_videoController!.value.isPlaying)
+                  !_videoController!.value.isPlaying &&
+                  mounted &&
+                  !_isDisposing)
                 Positioned.fill(
                   child: Container(
                     color: Colors.black.withValues(alpha: 0.3),
@@ -644,6 +682,8 @@ Download the app for video news updates!
       ),
     );
   }
+
+  // ... (keep the rest of your methods: _buildLoadingCarousel, _buildEmptyState, _buildErrorState, build)
 
   Widget _buildLoadingCarousel() {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -821,7 +861,8 @@ Download the app for video news updates!
             if (!newsProvider.isLoadingVideos && 
                 newsProvider.videosError == null && 
                 newsProvider.videos.isNotEmpty &&
-                _isFirstLoad) {
+                _isFirstLoad &&
+                mounted) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _handleInitialAutoPlay();
               });

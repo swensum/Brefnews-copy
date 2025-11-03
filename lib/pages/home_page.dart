@@ -635,7 +635,7 @@ class _NewsCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Share Feedback on Short Option
+         
             ListTile(
               leading: Icon(Icons.feedback, color: Colors.black87),
               title: Text(
@@ -866,7 +866,7 @@ class _NewsCard extends StatelessWidget {
                                   isBookmarked
                                       ? Icons.bookmark
                                       : Icons.bookmark_border,
-                                  size: screenWidth * 0.045,
+                                  size: screenWidth * 0.052,
                                   color: isBookmarked
                                       ? Theme.of(context).colorScheme.primary
                                       : Theme.of(
@@ -879,7 +879,7 @@ class _NewsCard extends StatelessWidget {
                           SizedBox(width: screenWidth * 0.02),
                           _AnimatedShareIcon(
                             onTap: () => _shareNewsCard(context),
-                            size: screenWidth * 0.045,
+                            size: screenWidth * 0.05,
                           ),
                         ],
                       ),

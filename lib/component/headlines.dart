@@ -717,7 +717,7 @@ class _HeadlineNewsCard extends StatelessWidget {
                                   },
                                   child: Icon(
                                     isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                                    size: screenWidth * 0.045,
+                                    size: screenWidth * 0.052,
                                     color: isBookmarked ? Theme.of(context).colorScheme.primary
                                         : Theme.of(context).colorScheme.onSecondaryFixed,
                                   ),
@@ -727,7 +727,7 @@ class _HeadlineNewsCard extends StatelessWidget {
                             SizedBox(width: screenWidth * 0.02),
                             _AnimatedShareIcon(
                               onTap: () => _shareNewsCard(context),
-                              size: screenWidth * 0.045,
+                              size: screenWidth * 0.05,
                             ),
                           ],
                         ),
