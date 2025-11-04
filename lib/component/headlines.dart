@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -437,34 +438,61 @@ class _HeadlineNewsCard extends StatelessWidget {
   }
 
   Future<void> _launchUrl(BuildContext context) async {
-    String rawUrl = news.sourceUrl.trim();
-    if (rawUrl.isEmpty) {
-      _showErrorSnackBar(context, "Invalid URL");
-      return;
-    }
+  String rawUrl = news.sourceUrl.trim();
+  
+  if (rawUrl.isEmpty) {
+    _showErrorSnackBar(context, "Invalid URL");
+    return;
+  }
 
-    if (!rawUrl.startsWith("http")) {
-      rawUrl = "https://$rawUrl";
-    }
+  // Ensure URL has proper scheme
+  if (!rawUrl.startsWith("http")) {
+    rawUrl = "https://$rawUrl";
+  }
 
-    final Uri url = Uri.parse(rawUrl);
+  final Uri url = Uri.parse(rawUrl);
 
-    if (!await canLaunchUrl(url)) {
-      if (context.mounted) {
-        _showErrorSnackBar(context, "Cannot launch URL: $rawUrl");
+  try {
+    // For iOS, use external launch for better compatibility
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+      bool launched = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+      
+      if (!launched && context.mounted) {
+        _showErrorSnackBar(context, "Could not launch URL");
       }
-      return;
+    } else {
+      // For Android, use platform default
+      bool launched = await launchUrl(
+        url,
+        mode: LaunchMode.platformDefault,
+      );
+      
+      if (!launched && context.mounted) {
+        _showErrorSnackBar(context, "Could not launch URL");
+      }
     }
-
-    try {
-      await launchUrl(url, mode: LaunchMode.platformDefault);
-    } catch (e) {
-      if (context.mounted) {
-        _showErrorSnackBar(context, "Error opening link: $e");
+  } catch (e) {
+    if (context.mounted) {
+      _showErrorSnackBar(context, "Error: ${e.toString()}");
+      
+      // Fallback: Try to open in Safari directly on iOS
+      if (Theme.of(context).platform == TargetPlatform.iOS) {
+        try {
+          await launchUrl(
+            Uri.parse('x-web-search://?$rawUrl'),
+            mode: LaunchMode.externalApplication,
+          );
+        } catch (fallbackError) {
+             if(!context.mounted) return;
+          _showErrorSnackBar(context, "Please check your URL format");
+        }
       }
     }
   }
-
+}
   void _showErrorSnackBar(BuildContext context, String message) {
     final screenWidth = MediaQuery.of(context).size.width;
 
@@ -747,15 +775,18 @@ class _HeadlineNewsCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Title
                         Text(
                           news.title,
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.onSurface,
-                            fontSize: screenWidth * 0.043,
+                            fontSize: Platform.isIOS
+                                ? screenWidth * 0.045
+                                : screenWidth * 0.043,
                             fontWeight: FontWeight.bold,
-                            height: 1.3,
+                            height: Platform.isIOS ? 1.4 : 1.3,
                           ),
-                          maxLines: 2,
+                          maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
                         SizedBox(height: screenHeight * 0.01),
@@ -766,16 +797,22 @@ class _HeadlineNewsCard extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                // Summary Text
                                 Text(
                                   news.summary,
                                   style: TextStyle(
-                                    color: Theme.of(context).textTheme.titleMedium?.color,
-                                    fontSize: screenWidth * 0.035,
-                                    height: 1.4,
+                                    color: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium?.color,
+                                    fontSize: Platform.isIOS
+                                        ? screenWidth * 0.038
+                                        : screenWidth * 0.035,
+                                    height: Platform.isIOS ? 1.6 : 1.4,
                                   ),
                                 ),
                                 SizedBox(height: screenHeight * 0.015),
 
+                                // Source and Time Info
                                 Container(
                                   padding: EdgeInsets.symmetric(
                                     vertical: screenHeight * 0.008,
@@ -783,12 +820,17 @@ class _HeadlineNewsCard extends StatelessWidget {
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.start,
                                     children: [
+                                      // Source
                                       Flexible(
                                         child: Text(
                                           news.source,
                                           style: TextStyle(
-                                            color: Theme.of(context).colorScheme.outlineVariant,
-                                            fontSize: screenWidth * 0.032,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
+                                            fontSize: Platform.isIOS
+                                                ? screenWidth * 0.034
+                                                : screenWidth * 0.032,
                                             fontWeight: FontWeight.w500,
                                           ),
                                           overflow: TextOverflow.ellipsis,
@@ -798,11 +840,14 @@ class _HeadlineNewsCard extends StatelessWidget {
 
                                       SizedBox(width: screenWidth * 0.02),
 
+                                      // Dot separator
                                       Container(
                                         width: screenWidth * 0.01,
                                         height: screenWidth * 0.01,
                                         decoration: BoxDecoration(
-                                          color: Theme.of(context).colorScheme.outlineVariant,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
                                           shape: BoxShape.circle,
                                         ),
                                       ),
@@ -811,8 +856,12 @@ class _HeadlineNewsCard extends StatelessWidget {
                                       Text(
                                         news.timeAgo,
                                         style: TextStyle(
-                                          color: Theme.of(context).colorScheme.outlineVariant,
-                                          fontSize: screenWidth * 0.032,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
+                                          fontSize: Platform.isIOS
+                                              ? screenWidth * 0.034
+                                              : screenWidth * 0.032,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,
@@ -828,7 +877,7 @@ class _HeadlineNewsCard extends StatelessWidget {
                     ),
                   ),
                 ),
-
+                // Headline section - takes full width (Same as NotificationPage)
                 GestureDetector(
                   onTap: () => _launchUrl(context),
                   child: Container(
@@ -886,7 +935,9 @@ class _HeadlineNewsCard extends StatelessWidget {
                                   news.headline!['headline'],
                                   style: TextStyle(
                                     color: Colors.white.withValues(alpha: 0.9),
-                                    fontSize: screenWidth * 0.037,
+                                    fontSize: Platform.isIOS
+                                        ? screenWidth * 0.039
+                                        : screenWidth * 0.037,
                                     fontWeight: FontWeight.w600,
                                   ),
                                   textAlign: TextAlign.left,
@@ -899,7 +950,9 @@ class _HeadlineNewsCard extends StatelessWidget {
                                   news.headline!['subheadline'],
                                   style: TextStyle(
                                     color: Colors.white.withValues(alpha: 0.9),
-                                    fontSize: screenWidth * 0.03,
+                                    fontSize: Platform.isIOS
+                                        ? screenWidth * 0.032
+                                        : screenWidth * 0.03,
                                   ),
                                   textAlign: TextAlign.left,
                                 ),
@@ -1076,7 +1129,9 @@ class _ImagePreviewDialog extends StatelessWidget {
                   news.title,
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: screenWidth * 0.042,
+            fontSize: Platform.isIOS
+                        ? screenWidth * 0.044
+                        : screenWidth * 0.042,
                     fontWeight: FontWeight.bold,
                   ),
                   maxLines: 3,

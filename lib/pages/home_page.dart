@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -73,12 +74,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             '🟢 [HomePage] Category changed to ${newsProvider.selectedCategory}, resetting to first article',
           );
         }
+        
         if (newsProvider.selectedCategory == 'Timeline') {
           return TimelinePage();
         }
+        
         if (newsProvider.selectedCategory == 'Videos') {
-  return VideosPage();
-}
+          return VideosPage();
+        }
+        
         if (newsProvider.selectedCategory == 'Bookmarks' &&
             newsProvider.news.isEmpty) {
           return _buildNoBookmarksWidget();
@@ -87,41 +91,93 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         if (newsProvider.isLoading) return _buildShimmerLoader();
         if (newsProvider.hasError) return _buildErrorWidget(newsProvider);
         if (newsProvider.news.isEmpty) return _buildEmptyWidget(newsProvider);
-        return MarvelousCarousel(
-          pagerType: PagerType.stack,
-          margin: 8,
-          scrollDirection: Axis.vertical,
-          reverse: true,
-          dotsVisible: false,
-          onPageChanged: (index) {
-            setState(() {
-              _currentPage = index;
-            });
+        
+        return NotificationListener<ScrollNotification>(
+          onNotification: (scrollNotification) {
+            // Prevent auto-refresh when there's no news
+            if (scrollNotification is OverscrollNotification) {
+              if (newsProvider.news.isEmpty && !newsProvider.isLoading) {
+                return true; // Block the pull-to-refresh
+              }
+            }
+            return false;
           },
-          children: newsProvider.news.asMap().entries.map((entry) {
-            int index = entry.key;
-            News news = entry.value;
+          child: RefreshIndicator(
+            onRefresh: () async {
+              // Only refresh if we should allow it
+              if (_shouldAllowRefresh(newsProvider)) {
+                await newsProvider.loadNews();
+              }
+            },
+            // Disable refresh indicator when no news or in bookmarks
+            color: (newsProvider.news.isEmpty || newsProvider.selectedCategory == 'Bookmarks') 
+                ? Colors.transparent 
+                : null,
+            backgroundColor: (newsProvider.news.isEmpty || newsProvider.selectedCategory == 'Bookmarks')
+                ? Colors.transparent
+                : null,
+            child: MarvelousCarousel(
+              pagerType: PagerType.stack,
+              margin: 8,
+              scrollDirection: Axis.vertical,
+              reverse: true,
+              dotsVisible: false,
+              viewportFraction: 1.0,
+              
+              onPageChanged: (index) {
+                final stopwatch = Stopwatch()..start();
+                
+                setState(() {
+                  _currentPage = index;
+                });
+                
+                print('🔄 Page change to $index took ${stopwatch.elapsedMilliseconds}ms');
+                
+                // Preload next images when page changes
+                if (index < newsProvider.news.length - 1) {
+                  final nextNews = newsProvider.news[index + 1];
+                  if (nextNews.imageUrl != null && nextNews.imageUrl!.isNotEmpty) {
+                    precacheImage(NetworkImage(nextNews.imageUrl!), context);
+                  }
+                }
+                
+                // Preload next 2 images for smoother scrolling
+                if (index < newsProvider.news.length - 2) {
+                  final nextNews2 = newsProvider.news[index + 2];
+                  if (nextNews2.imageUrl != null && nextNews2.imageUrl!.isNotEmpty) {
+                    precacheImage(NetworkImage(nextNews2.imageUrl!), context);
+                  }
+                }
+              },
+              children: newsProvider.news.asMap().entries.map((entry) {
+                int index = entry.key;
+                News news = entry.value;
+                bool isActive = index == _currentPage;
 
-            bool isActive = index == _currentPage;
-
-            return AnimatedScale(
-              scale: isActive ? 1.0 : 0.98,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-              child: AnimatedOpacity(
-                opacity: isActive ? 1.0 : 1.0,
-                duration: const Duration(milliseconds: 300),
-                child: _NewsCard(
-                  news: news,
-                  isActive: isActive,
-                  currentCategory: newsProvider.selectedCategory,
-                ),
-              ),
-            );
-          }).toList(),
+                return AnimatedScale(
+                  scale: isActive ? 1.0 : 0.98,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOut,
+                  child: AnimatedOpacity(
+                    opacity: isActive ? 1.0 : 1.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: _NewsCard(
+                      news: news,
+                      isActive: isActive,
+                      currentCategory: newsProvider.selectedCategory,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
         );
       },
     );
+  }
+
+  bool _shouldAllowRefresh(NewsProvider newsProvider) {
+    return !newsProvider.isLoading && newsProvider.selectedCategory != 'Bookmarks';
   }
 
   Widget _buildNoBookmarksWidget() {
@@ -421,6 +477,7 @@ class _NewsCard extends StatelessWidget {
     required this.isActive,
     required this.currentCategory,
   });
+  
   Future<void> _shareNewsCard(BuildContext context) async {
     await ShareUtils.shareNewsCard(
       globalKey: shareKey,
@@ -430,35 +487,72 @@ class _NewsCard extends StatelessWidget {
   }
 
   Future<void> _launchUrl(BuildContext context) async {
-    String rawUrl = news.sourceUrl.trim();
-    if (!rawUrl.startsWith("http")) {
-      rawUrl = "https://$rawUrl";
-    }
+  String rawUrl = news.sourceUrl.trim();
+  
+  if (rawUrl.isEmpty) {
+    _showErrorSnackBar(context, "Invalid URL");
+    return;
+  }
 
-    final Uri url = Uri.parse(rawUrl);
+  // Ensure URL has proper scheme
+  if (!rawUrl.startsWith("http")) {
+    rawUrl = "https://$rawUrl";
+  }
 
-    try {
-      final launched = await launchUrl(url, mode: LaunchMode.platformDefault);
+  final Uri url = Uri.parse(rawUrl);
+
+  try {
+    // For iOS, use external launch for better compatibility
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+      bool launched = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+      
       if (!launched && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Could not launch $rawUrl"),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showErrorSnackBar(context, "Could not launch URL");
       }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error opening link: $e"),
-            backgroundColor: Colors.red,
-          ),
-        );
+    } else {
+      // For Android, use platform default
+      bool launched = await launchUrl(
+        url,
+        mode: LaunchMode.platformDefault,
+      );
+      
+      if (!launched && context.mounted) {
+        _showErrorSnackBar(context, "Could not launch URL");
+      }
+    }
+  } catch (e) {
+    if (context.mounted) {
+      _showErrorSnackBar(context, "Error: ${e.toString()}");
+      
+      // Fallback: Try to open in Safari directly on iOS
+      if (Theme.of(context).platform == TargetPlatform.iOS) {
+        try {
+          await launchUrl(
+            Uri.parse('x-web-search://?$rawUrl'),
+            mode: LaunchMode.externalApplication,
+          );
+        } catch (fallbackError) {
+          if(!context.mounted) return;
+          _showErrorSnackBar(context, "Please check your URL format");
+        }
       }
     }
   }
+}
+  void _showErrorSnackBar(BuildContext context, String message) {
+    final screenWidth = MediaQuery.of(context).size.width;
 
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: TextStyle(fontSize: screenWidth * 0.035)),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
   void _showImagePreview(BuildContext context) {
     if (news.imageUrl == null || news.imageUrl!.isEmpty) return;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -551,7 +645,9 @@ class _NewsCard extends StatelessWidget {
                     news.title,
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: screenWidth * 0.04,
+                      fontSize: Platform.isIOS
+                        ? screenWidth * 0.044
+                        : screenWidth * 0.042,
                       fontWeight: FontWeight.bold,
                     ),
                     maxLines: 3,
@@ -635,7 +731,6 @@ class _NewsCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-         
             ListTile(
               leading: Icon(Icons.feedback, color: Colors.black87),
               title: Text(
@@ -713,6 +808,9 @@ class _NewsCard extends StatelessWidget {
                             height: maxImageHeight,
                             fit: BoxFit.cover,
                             alignment: Alignment.topLeft,
+                        
+                            cacheWidth: (screenWidth * 5).toInt(),
+                            filterQuality: FilterQuality.medium,
                             loadingBuilder: (context, child, loadingProgress) {
                               if (loadingProgress == null) return child;
                               return Container(
@@ -889,192 +987,204 @@ class _NewsCard extends StatelessWidget {
               ),
 
               Expanded(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    screenWidth * 0.04,
-                    screenHeight * 0.02,
-                    screenWidth * 0.04,
-                    screenHeight * 0.015,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title
-                      Text(
-                        news.title,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontSize: screenWidth * 0.043,
-                          fontWeight: FontWeight.bold,
-                          height: 1.3,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      screenWidth * 0.04,
+                      screenHeight * 0.02,
+                      screenWidth * 0.04,
+                      screenHeight * 0.015,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title
+                        Text(
+                          news.title,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: Platform.isIOS
+                                ? screenWidth * 0.045
+                                : screenWidth * 0.043,
+                            fontWeight: FontWeight.bold,
+                            height: Platform.isIOS ? 1.4 : 1.3,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      SizedBox(height: screenHeight * 0.01),
-                      Flexible(
-                        fit: FlexFit.loose,
-                        child: SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Summary Text
-                              Text(
-                                news.summary,
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium?.color,
-                                  fontSize: screenWidth * 0.035,
-                                  height: 1.4,
+                        SizedBox(height: screenHeight * 0.01),
+                        Flexible(
+                          fit: FlexFit.loose,
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Summary Text
+                                Text(
+                                  news.summary,
+                                  style: TextStyle(
+                                    color: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium?.color,
+                                    fontSize: Platform.isIOS
+                                        ? screenWidth * 0.038
+                                        : screenWidth * 0.035,
+                                    height: Platform.isIOS ? 1.6 : 1.4,
+                                  ),
                                 ),
-                              ),
-                              SizedBox(height: screenHeight * 0.015),
+                                SizedBox(height: screenHeight * 0.015),
 
-                              // Source and Time Info
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  vertical: screenHeight * 0.008,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: [
-                                    // Source
-                                    Flexible(
-                                      child: Text(
-                                        news.source,
+                                // Source and Time Info
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: screenHeight * 0.008,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    children: [
+                                      // Source
+                                      Flexible(
+                                        child: Text(
+                                          news.source,
+                                          style: TextStyle(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
+                                            fontSize: Platform.isIOS
+                                                ? screenWidth * 0.034
+                                                : screenWidth * 0.032,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ),
+
+                                      SizedBox(width: screenWidth * 0.02),
+
+                                      // Dot separator
+                                      Container(
+                                        width: screenWidth * 0.01,
+                                        height: screenWidth * 0.01,
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      SizedBox(width: screenWidth * 0.02),
+
+                                      Text(
+                                        news.timeAgo,
                                         style: TextStyle(
                                           color: Theme.of(
                                             context,
                                           ).colorScheme.outlineVariant,
-                                          fontSize: screenWidth * 0.032,
-                                          fontWeight: FontWeight.w500,
+                                          fontSize: Platform.isIOS
+                                              ? screenWidth * 0.034
+                                              : screenWidth * 0.032,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,
                                       ),
-                                    ),
-
-                                    SizedBox(width: screenWidth * 0.02),
-
-                                    // Dot separator
-                                    Container(
-                                      width: screenWidth * 0.01,
-                                      height: screenWidth * 0.01,
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.outlineVariant,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    SizedBox(width: screenWidth * 0.02),
-
-                                    // Time - don't expand, just take needed space
-                                    Text(
-                                      news.timeAgo,
-                                      style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.outlineVariant,
-                                        fontSize: screenWidth * 0.032,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: () => _launchUrl(context),
-                child: Container(
-                  width: double.infinity,
-                  height: screenHeight * 0.07,
-                  decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                    image: news.imageUrl != null && news.imageUrl!.isNotEmpty
-                        ? DecorationImage(
-                            image: NetworkImage(news.imageUrl!),
-                            fit: BoxFit.cover,
-                            colorFilter: ColorFilter.mode(
-                              Colors.black.withValues(alpha: 0.6),
-                              BlendMode.darken,
+                              ],
                             ),
-                          )
-                        : null,
-                    color: news.imageUrl == null || news.imageUrl!.isEmpty
-                        ? Colors.grey[800]
-                        : null,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-                      child: Container(
-                        padding: EdgeInsets.only(left: screenWidth * 0.04),
-                        decoration: BoxDecoration(
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(16),
-                            bottomRight: Radius.circular(16),
-                          ),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.0),
-                              Colors.black.withValues(alpha: 0.35),
-                            ],
                           ),
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (news.headline != null &&
-                                news.headline!['headline'] != null)
-                              Text(
-                                news.headline!['headline'],
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                  fontSize: screenWidth * 0.037,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                textAlign: TextAlign.left,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                      ],
+                    ),
+                  ),
+                ),
+            
+                GestureDetector(
+                  onTap: () => _launchUrl(context),
+                  child: Container(
+                    width: double.infinity,
+                    height: screenHeight * 0.07,
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
+                      ),
+                      image: news.imageUrl != null && news.imageUrl!.isNotEmpty
+                          ? DecorationImage(
+                              image: NetworkImage(news.imageUrl!),
+                              fit: BoxFit.cover,
+                              colorFilter: ColorFilter.mode(
+                                Colors.black.withValues(alpha: 0.6),
+                                BlendMode.darken,
                               ),
-                            if (news.headline != null &&
-                                news.headline!['subheadline'] != null)
-                              Text(
-                                news.headline!['subheadline'],
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                  fontSize: screenWidth * 0.03,
+                            )
+                          : null,
+                      color: news.imageUrl == null || news.imageUrl!.isEmpty
+                          ? Colors.grey[800]
+                          : null,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
+                      ),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                        child: Container(
+                          padding: EdgeInsets.only(left: screenWidth * 0.04),
+                          decoration: BoxDecoration(
+                            borderRadius: const BorderRadius.only(
+                              bottomLeft: Radius.circular(16),
+                              bottomRight: Radius.circular(16),
+                            ),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.0),
+                                Colors.black.withValues(alpha: 0.35),
+                              ],
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (news.headline != null &&
+                                  news.headline!['headline'] != null)
+                                Text(
+                                  news.headline!['headline'],
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    fontSize: Platform.isIOS
+                                        ? screenWidth * 0.039
+                                        : screenWidth * 0.037,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  textAlign: TextAlign.left,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                textAlign: TextAlign.left,
-                              ),
-                          ],
+                              if (news.headline != null &&
+                                  news.headline!['subheadline'] != null)
+                                Text(
+                                  news.headline!['subheadline'],
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    fontSize: Platform.isIOS
+                                        ? screenWidth * 0.032
+                                        : screenWidth * 0.03,
+                                  ),
+                                  textAlign: TextAlign.left,
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         ),

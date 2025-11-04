@@ -173,9 +173,6 @@ Future<void> loadVideos() async {
   Future<void> fetchHeadlines() async {
     try {
       _isLoadingHeadlines = true;
-      // Remove this notifyListeners() call to avoid build conflicts
-      // notifyListeners();
-
       final response = await SupabaseService().client
           .from('headlines')
           .select('*')
@@ -268,7 +265,7 @@ Future<void> loadVideos() async {
       if (kDebugMode) print('Error saving language: $e');
     }
   }
-
+ 
   Future<void> loadNews() async {
     try {
       setState(() {
@@ -578,7 +575,67 @@ Future<void> loadVideos() async {
     }
   }
 
-  Future<void> refreshNews() async => await loadNews();
+Future<int> silentRefresh() async {
+  try {
+    print('🟢 [NewsProvider] Performing silent refresh...');
+    
+    String? rpcCategoryFilter;
+    final response = await SupabaseService().client
+        .rpc(
+          'get_translated_news_with_notified',
+          params: {
+            'target_language': _currentLanguage,
+            'limit_count': 100,
+            'category_filter': rpcCategoryFilter,
+          },
+        )
+        .select();
+
+    final List<News> newNews = response.map<News>((item) => News.fromJson(item)).toList();
+    
+    // Check if there are actually new articles
+    final Set<String> currentIds = _allNews.map((news) => news.id).toSet();
+    final List<News> actuallyNewNews = newNews.where((news) => !currentIds.contains(news.id)).toList();
+    
+    if (actuallyNewNews.isNotEmpty) {
+      print('🟢 [NewsProvider] Found ${actuallyNewNews.length} new articles, updating list');
+      
+      // Add new news to the beginning while preserving existing ones
+      _allNews = [...actuallyNewNews, ..._allNews];
+      _filterNewsByCategory(_selectedCategory);
+      
+      // Only notify if there are actual changes
+      notifyListeners();
+      return actuallyNewNews.length;
+    } else {
+      print('🟢 [NewsProvider] No new articles found');
+      return 0;
+    }
+  } catch (e) {
+    print('🔴 [NewsProvider] Error in silent refresh: $e');
+    return 0;
+  }
+}
+
+Future<void> refreshNews() async {
+  try {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+    
+    await silentRefresh();
+    
+    setState(() {
+      _isLoading = false;
+    });
+  } catch (e) {
+    setState(() {
+      _isLoading = false;
+      _hasError = true;
+    });
+  }
+}
   void setState(void Function() fn) {
     fn();
     notifyListeners();

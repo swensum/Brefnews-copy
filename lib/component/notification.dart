@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -9,7 +10,6 @@ import '../language/app_localizations.dart';
 import '../provider/news_provider.dart';
 import '../models/news_model.dart';
 import '../utilities/share_utils.dart';
-
 
 class NotificationPage extends StatefulWidget {
   final News? initialNews;
@@ -198,14 +198,14 @@ class _NotificationPageState extends State<NotificationPage>
         children: [
           Icon(
             Icons.notifications_none,
-            color: Theme.of(context).colorScheme.outlineVariant, 
+            color: Theme.of(context).colorScheme.outlineVariant,
             size: screenHeight * 0.1,
           ),
           SizedBox(height: screenHeight * 0.02),
           Text(
             localizations.noNotifications,
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onPrimary, 
+              color: Theme.of(context).colorScheme.onPrimary,
               fontSize: screenWidth * 0.05,
               fontWeight: FontWeight.w600,
             ),
@@ -213,7 +213,10 @@ class _NotificationPageState extends State<NotificationPage>
           SizedBox(height: screenHeight * 0.01),
           Text(
             localizations.youWillSeeNotificationsHere,
-            style: TextStyle(color: Theme.of(context).colorScheme.outlineVariant, fontSize: screenWidth * 0.04),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.outlineVariant,
+              fontSize: screenWidth * 0.04,
+            ),
           ),
         ],
       ),
@@ -259,7 +262,9 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
         padding: EdgeInsets.all(widget.size * 0.2),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: _isTapped ? Colors.blue.withValues(alpha:  0.2) : Colors.transparent,
+          color: _isTapped
+              ? Colors.blue.withValues(alpha: 0.2)
+              : Colors.transparent,
         ),
         child: AnimatedScale(
           duration: const Duration(milliseconds: 200),
@@ -268,7 +273,9 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
           child: Icon(
             Icons.share,
             size: widget.size,
-            color: _isTapped ?Theme.of(context).colorScheme.primary:Theme.of(context).colorScheme.onSecondaryFixed,
+            color: _isTapped
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.onSecondaryFixed,
           ),
         ),
       ),
@@ -297,29 +304,54 @@ class _NotificationNewsCard extends StatelessWidget {
 
   Future<void> _launchUrl(BuildContext context) async {
     String rawUrl = news.sourceUrl.trim();
+
     if (rawUrl.isEmpty) {
       _showErrorSnackBar(context, "Invalid URL");
       return;
     }
 
+    // Ensure URL has proper scheme
     if (!rawUrl.startsWith("http")) {
       rawUrl = "https://$rawUrl";
     }
 
     final Uri url = Uri.parse(rawUrl);
 
-    if (!await canLaunchUrl(url)) {
-      if (context.mounted) {
-        _showErrorSnackBar(context, "Cannot launch URL: $rawUrl");
-      }
-      return;
-    }
-
     try {
-      await launchUrl(url, mode: LaunchMode.platformDefault);
+      // For iOS, use external launch for better compatibility
+      if (Theme.of(context).platform == TargetPlatform.iOS) {
+        bool launched = await launchUrl(
+          url,
+          mode: LaunchMode.externalApplication,
+        );
+
+        if (!launched && context.mounted) {
+          _showErrorSnackBar(context, "Could not launch URL");
+        }
+      } else {
+        // For Android, use platform default
+        bool launched = await launchUrl(url, mode: LaunchMode.platformDefault);
+
+        if (!launched && context.mounted) {
+          _showErrorSnackBar(context, "Could not launch URL");
+        }
+      }
     } catch (e) {
       if (context.mounted) {
-        _showErrorSnackBar(context, "Error opening link: $e");
+        _showErrorSnackBar(context, "Error: ${e.toString()}");
+
+        // Fallback: Try to open in Safari directly on iOS
+        if (Theme.of(context).platform == TargetPlatform.iOS) {
+          try {
+            await launchUrl(
+              Uri.parse('x-web-search://?$rawUrl'),
+              mode: LaunchMode.externalApplication,
+            );
+          } catch (fallbackError) {
+            if (!context.mounted) return;
+            _showErrorSnackBar(context, "Please check your URL format");
+          }
+        }
       }
     }
   }
@@ -429,15 +461,19 @@ class _NotificationNewsCard extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-    // Then navigate to feedback page
-    context.push('/feedback-detail', extra: {
-      'newsHeadline': news.title,
-      'onFeedbackSubmitted': (String type, String text, String headline) {
-        // Handle feedback submission callback if needed
-        print('Feedback submitted: $type - $text');
-      }
-    });
-  });
+                  // Then navigate to feedback page
+                  context.push(
+                    '/feedback-detail',
+                    extra: {
+                      'newsHeadline': news.title,
+                      'onFeedbackSubmitted':
+                          (String type, String text, String headline) {
+                            // Handle feedback submission callback if needed
+                            print('Feedback submitted: $type - $text');
+                          },
+                    },
+                  );
+                });
               },
             ),
           ],
@@ -460,7 +496,7 @@ class _NotificationNewsCard extends StatelessWidget {
           color: Colors.transparent,
           child: Container(
             decoration: BoxDecoration(
-              color:  Theme.of(context).scaffoldBackgroundColor,
+              color: Theme.of(context).scaffoldBackgroundColor,
               borderRadius: BorderRadius.circular(16),
               boxShadow: const [
                 BoxShadow(
@@ -479,8 +515,6 @@ class _NotificationNewsCard extends StatelessWidget {
                       _buildNewsImage(context, maxImageHeight)
                     else
                       _buildPlaceholderImage(maxImageHeight, screenWidth),
-
-                    // Three Dots Menu Button - Top Right Corner
                     Positioned(
                       top: screenWidth * 0.02,
                       right: screenWidth * 0.02,
@@ -490,7 +524,7 @@ class _NotificationNewsCard extends StatelessWidget {
                           width: screenWidth * 0.08,
                           height: screenWidth * 0.08,
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha:  0.6),
+                            color: Colors.black.withValues(alpha: 0.6),
                             shape: BoxShape.circle,
                           ),
                           child: Row(
@@ -540,7 +574,7 @@ class _NotificationNewsCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(16),
                           child: Image.asset(
                             'assets/brefnews.png',
-                              color: Theme.of(context).colorScheme.onSurface,
+                            color: Theme.of(context).colorScheme.onSurface,
                             width: screenWidth * 0.25,
                             height: screenWidth * 0.08,
                             fit: BoxFit.cover,
@@ -582,7 +616,9 @@ class _NotificationNewsCard extends StatelessWidget {
                                     size: screenWidth * 0.052,
                                     color: isBookmarked
                                         ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(context).colorScheme.onSecondaryFixed,
+                                        : Theme.of(
+                                            context,
+                                          ).colorScheme.onSecondaryFixed,
                                   ),
                                 );
                               },
@@ -617,11 +653,13 @@ class _NotificationNewsCard extends StatelessWidget {
                           news.title,
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.onSurface,
-                            fontSize: screenWidth * 0.043,
+                            fontSize: Platform.isIOS
+                                ? screenWidth * 0.045
+                                : screenWidth * 0.043,
                             fontWeight: FontWeight.bold,
-                            height: 1.3,
+                            height: Platform.isIOS ? 1.4 : 1.3,
                           ),
-                          maxLines: 2,
+                          maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
                         SizedBox(height: screenHeight * 0.01),
@@ -636,9 +674,13 @@ class _NotificationNewsCard extends StatelessWidget {
                                 Text(
                                   news.summary,
                                   style: TextStyle(
-                                    color: Theme.of(context).textTheme.titleMedium?.color,
-                                    fontSize: screenWidth * 0.035,
-                                    height: 1.4,
+                                    color: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium?.color,
+                                    fontSize: Platform.isIOS
+                                        ? screenWidth * 0.038
+                                        : screenWidth * 0.035,
+                                    height: Platform.isIOS ? 1.6 : 1.4,
                                   ),
                                 ),
                                 SizedBox(height: screenHeight * 0.015),
@@ -656,8 +698,12 @@ class _NotificationNewsCard extends StatelessWidget {
                                         child: Text(
                                           news.source,
                                           style: TextStyle(
-                                            color: Theme.of(context).colorScheme.outlineVariant,
-                                            fontSize: screenWidth * 0.032,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
+                                            fontSize: Platform.isIOS
+                                                ? screenWidth * 0.034
+                                                : screenWidth * 0.032,
                                             fontWeight: FontWeight.w500,
                                           ),
                                           overflow: TextOverflow.ellipsis,
@@ -672,18 +718,23 @@ class _NotificationNewsCard extends StatelessWidget {
                                         width: screenWidth * 0.01,
                                         height: screenWidth * 0.01,
                                         decoration: BoxDecoration(
-                                          color: Theme.of(context).colorScheme.outlineVariant,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
                                           shape: BoxShape.circle,
                                         ),
                                       ),
                                       SizedBox(width: screenWidth * 0.02),
 
-                                      // Time - don't expand, just take needed space
                                       Text(
                                         news.timeAgo,
                                         style: TextStyle(
-                                          color: Theme.of(context).colorScheme.outlineVariant,
-                                          fontSize: screenWidth * 0.032,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
+                                          fontSize: Platform.isIOS
+                                              ? screenWidth * 0.034
+                                              : screenWidth * 0.032,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,
@@ -715,7 +766,7 @@ class _NotificationNewsCard extends StatelessWidget {
                               image: NetworkImage(news.imageUrl!),
                               fit: BoxFit.cover,
                               colorFilter: ColorFilter.mode(
-                                Colors.black.withValues(alpha:  0.6),
+                                Colors.black.withValues(alpha: 0.6),
                                 BlendMode.darken,
                               ),
                             )
@@ -742,8 +793,8 @@ class _NotificationNewsCard extends StatelessWidget {
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                               colors: [
-                                Colors.black.withValues(alpha:  0.0),
-                                Colors.black.withValues(alpha:  0.35),
+                                Colors.black.withValues(alpha: 0.0),
+                                Colors.black.withValues(alpha: 0.35),
                               ],
                             ),
                           ),
@@ -757,7 +808,9 @@ class _NotificationNewsCard extends StatelessWidget {
                                   news.headline!['headline'],
                                   style: TextStyle(
                                     color: Colors.white.withValues(alpha: 0.9),
-                                    fontSize: screenWidth * 0.037,
+                                    fontSize: Platform.isIOS
+                                        ? screenWidth * 0.039
+                                        : screenWidth * 0.037,
                                     fontWeight: FontWeight.w600,
                                   ),
                                   textAlign: TextAlign.left,
@@ -770,7 +823,9 @@ class _NotificationNewsCard extends StatelessWidget {
                                   news.headline!['subheadline'],
                                   style: TextStyle(
                                     color: Colors.white.withValues(alpha: 0.9),
-                                    fontSize: screenWidth * 0.03,
+                                    fontSize: Platform.isIOS
+                                        ? screenWidth * 0.032
+                                        : screenWidth * 0.03,
                                   ),
                                   textAlign: TextAlign.left,
                                 ),
@@ -948,7 +1003,9 @@ class _ImagePreviewDialog extends StatelessWidget {
                   news.title,
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: screenWidth * 0.042,
+                    fontSize: Platform.isIOS
+                        ? screenWidth * 0.044
+                        : screenWidth * 0.042,
                     fontWeight: FontWeight.bold,
                   ),
                   maxLines: 3,
