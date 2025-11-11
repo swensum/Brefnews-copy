@@ -1,20 +1,23 @@
+import 'package:html/parser.dart' as html_parser;
+
 class News {
   final String id;
   final String title;
-  final String summary; 
+  final String summary; // This will now be automatically cleaned
   final String? imageUrl;
   final String sourceUrl;
   final String source; 
-  final String category; // This will now show the topic name
+  final String category; 
   final DateTime publishedAt;
   final DateTime createdAt;
   final bool notified;
   final List<String> categories;
   final Map<String, dynamic>? headline;
+
   News({
     required this.id,
     required this.title,
-    required this.summary,
+    required String summary, // Change to required String
     this.imageUrl,
     required this.sourceUrl,
     required this.source,
@@ -23,41 +26,68 @@ class News {
     required this.createdAt,
     required this.notified,
     this.categories = const [],
-     this.headline, 
-  });
+    this.headline, 
+  }) : summary = _cleanHtmlSummary(summary); // Clean HTML in constructor
 
   factory News.fromJson(Map<String, dynamic> json) {
-     Map<String, dynamic>? headlineData;
+    Map<String, dynamic>? headlineData;
     if (json['headline'] != null) {
       if (json['headline'] is Map) {
         headlineData = Map<String, dynamic>.from(json['headline']);
       }
     }
+    
     return News(
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
-      summary: json['summary']?.toString() ?? '',
+      summary: json['summary']?.toString() ?? '', // This gets cleaned in constructor
       imageUrl: json['image_url']?.toString(),
       sourceUrl: json['source_url']?.toString() ?? '',
       source: json['source']?.toString() ?? 'Unknown',
-      // FIX: Use topics field instead of category field
-      category: json['topics']?.toString() ?? 'News', // Changed from 'General' to 'News'
+      category: json['topics']?.toString() ?? 'News',
       publishedAt: DateTime.parse(json['published_at']?.toString() ?? DateTime.now().toString()),
       createdAt: DateTime.parse(json['created_at']?.toString() ?? DateTime.now().toString()),
       notified: json['notified'] ?? false,
       categories: json['categories'] != null 
           ? List<String>.from(json['categories'])
           : <String>[],
-            headline: headlineData, 
-    
+      headline: headlineData, 
     );
+  }
+
+  // HTML cleaning method
+  static String _cleanHtmlSummary(String htmlString) {
+    try {
+      if (htmlString.isEmpty) return '';
+      
+      final document = html_parser.parse(htmlString);
+      final plainText = document.body?.text ?? htmlString;
+      
+      // Basic cleaning if parsing doesn't work well
+      return _basicClean(plainText);
+    } catch (e) {
+      // If parsing fails, do basic cleaning
+      return _basicClean(htmlString);
+    }
+  }
+
+  static String _basicClean(String text) {
+    return text
+        .replaceAll(RegExp(r'<[^>]*>'), '') // Remove any remaining HTML tags
+        .replaceAll('&#8230;', '...') // Replace ellipsis
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .trim();
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'title': title,
-      'summary': summary,
+      'summary': summary, // This is now clean text
       'image_url': imageUrl,
       'source_url': sourceUrl,
       'source': source,

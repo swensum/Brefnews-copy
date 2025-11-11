@@ -11,118 +11,129 @@ class AuthService {
   static final SupabaseClient _supabase = Supabase.instance.client;
 
   static Future<void> signInWithPhone({
-  required String phone,
-  required Function(String) onCodeSent,
-  required Function(String) onError,
-}) async {
-  try {
-    final cleanedPhone = phone.replaceAll(RegExp(r'[-\s]'), '');
-    
-    print('📱 Production: Sending OTP to: $cleanedPhone');
-    
-    // Production call - will send real SMS
-    await _supabase.auth.signInWithOtp(
-      phone: cleanedPhone,
-     
-    );
-    
-    print('✅ OTP sent successfully to: $cleanedPhone');
-    
-    onCodeSent('Verification code sent to $phone');
-  } on AuthException catch (e) {
-    print('❌ AuthException: ${e.message}');
-    
-    // Handle specific production errors
-    if (e.message.contains('invalid phone')) {
-      onError('Please enter a valid phone number');
-    } else if (e.message.contains('rate limit')) {
-      onError('Too many attempts. Please try again later.');
-    } else {
-      onError('Authentication error: ${e.message}');
+    required String phone,
+    required Function(String) onCodeSent,
+    required Function(String) onError,
+  }) async {
+    try {
+      final cleanedPhone = phone.replaceAll(RegExp(r'[-\s]'), '');
+      
+      print('📱 Production: Sending OTP to: $cleanedPhone');
+      
+      // Production call - will send real SMS
+      await _supabase.auth.signInWithOtp(
+        phone: cleanedPhone,
+      );
+      
+      print('✅ OTP sent successfully to: $cleanedPhone');
+      
+      onCodeSent('Verification code sent to $phone');
+    } on AuthException catch (e) {
+      print('❌ AuthException: ${e.message}');
+      
+      // Handle specific production errors
+      if (e.message.contains('invalid phone')) {
+        onError('Please enter a valid phone number');
+      } else if (e.message.contains('rate limit')) {
+        onError('Too many attempts. Please try again later.');
+      } else {
+        onError('Authentication error: ${e.message}');
+      }
+    } catch (e) {
+      print('❌ General error: $e');
+      onError('Failed to send verification code. Please try again.');
     }
-  } catch (e) {
-    print('❌ General error: $e');
-    onError('Failed to send verification code. Please try again.');
   }
-}
 
-static Future<void> verifyOTP({
-  required String phone,
-  required String token,
-  required Function(User) onSuccess,
-  required Function(String) onError,
-}) async {
-  try {
-    final cleanedPhone = phone.replaceAll(RegExp(r'[-\s]'), '');
-    
-    print('🔐 Production: Verifying OTP for: $cleanedPhone');
-    
-    final AuthResponse response = await _supabase.auth.verifyOTP(
-      phone: cleanedPhone,
-      token: token.trim(), // Trim whitespace
-      type: OtpType.sms,
-    );
-    
-    final user = response.user;
-    
-    if (user != null) {
-      print('✅ User verified successfully: ${user.id}');
+  static Future<void> verifyOTP({
+    required String phone,
+    required String token,
+    required Function(User) onSuccess,
+    required Function(String) onError,
+  }) async {
+    try {
+      final cleanedPhone = phone.replaceAll(RegExp(r'[-\s]'), '');
       
-      // Create user profile for phone user
-      await _createUserProfile(user);
+      print('🔐 Production: Verifying OTP for: $cleanedPhone');
       
-      // Update shared preferences
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
-      await prefs.setString('authMethod', 'phone');
+      final AuthResponse response = await _supabase.auth.verifyOTP(
+        phone: cleanedPhone,
+        token: token.trim(), // Trim whitespace
+        type: OtpType.sms,
+      );
       
-      onSuccess(user);
-    } else {
-      onError('Verification failed. Please try again.');
+      final user = response.user;
+      
+      if (user != null) {
+        print('✅ User verified successfully: ${user.id}');
+        
+        // Create user profile for phone user with role
+        await _createUserProfile(user);
+        
+        // Update shared preferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', true);
+        await prefs.setString('authMethod', 'phone');
+        
+        onSuccess(user);
+      } else {
+        onError('Verification failed. Please try again.');
+      }
+    } on AuthException catch (e) {
+      print('❌ AuthException during verification: ${e.message}');
+      
+      // Handle specific verification errors
+      if (e.message.contains('invalid')) {
+        onError('Invalid verification code. Please try again.');
+      } else if (e.message.contains('expired')) {
+        onError('Verification code has expired. Please request a new one.');
+      } else {
+        onError('Verification error: ${e.message}');
+      }
+    } catch (e) {
+      print('❌ General verification error: $e');
+      onError('Failed to verify code. Please try again.');
     }
-  } on AuthException catch (e) {
-    print('❌ AuthException during verification: ${e.message}');
-    
-    // Handle specific verification errors
-    if (e.message.contains('invalid')) {
-      onError('Invalid verification code. Please try again.');
-    } else if (e.message.contains('expired')) {
-      onError('Verification code has expired. Please request a new one.');
-    } else {
-      onError('Verification error: ${e.message}');
-    }
-  } catch (e) {
-    print('❌ General verification error: $e');
-    onError('Failed to verify code. Please try again.');
   }
-}static Future<void> _createUserProfile(User user) async {
-  try {
-    final profileExists = await _supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('id', user.id)
-        .maybeSingle();
 
-    if (profileExists == null) {
-      // Generate a default username from phone
-      String defaultUsername = 'User${user.phone?.substring(user.phone!.length - 4) ?? '1234'}';
-      
-      await _supabase.from('user_profiles').insert({
-        'id': user.id,
-        'username': defaultUsername,
-        'phone': user.phone,
-        'bio': null,
-        'updated_at': DateTime.now().toIso8601String(),
-      });
-      print("✅ User profile created for phone user: ${user.id}");
-    } else {
-      print("✅ User profile already exists: ${user.id}");
+  // UPDATED: Create user profile with role
+  static Future<void> _createUserProfile(User user) async {
+    try {
+      final profileExists = await _supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (profileExists == null) {
+        String defaultUsername = 'User${user.phone?.substring(user.phone!.length - 4) ?? '1234'}';
+        
+        // Create user profile with role set to 'user'
+        await _supabase.from('user_profiles').insert({
+          'id': user.id,
+          'username': defaultUsername,
+          'phone': user.phone,
+          'bio': null,
+          'role': 'user', // Set role to 'user'
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+        print("✅ User profile created with role 'user' for phone user: ${user.id}");
+      } else {
+        print("✅ User profile already exists: ${user.id}");
+        
+        // Ensure role is set even for existing profiles
+        await _supabase.from('user_profiles').update({
+          'role': 'user',
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', user.id);
+        print("✅ User role updated to 'user' for: ${user.id}");
+      }
+    } catch (e) {
+      print('❌ Error creating/updating user profile: $e');
+      // Don't throw error - auth succeeded even if profile creation fails
     }
-  } catch (e) {
-    print('❌ Error creating user profile: $e');
-    // Don't throw error - auth succeeded even if profile creation fails
   }
-}
+
   // Get current user
   static User? get currentUser {
     return _supabase.auth.currentUser;
@@ -208,114 +219,123 @@ static Future<void> verifyOTP({
       return null;
     }
   }
-static Future<bool> signInWithGoogle(BuildContext context) async {
-  try {
-    // Load environment variables
-    await dotenv.load();
-    
-    final webClientId = dotenv.env['WEB_CLIENT_ID'] ?? '';
-    final iosClientId = dotenv.env['IOS_CLIENT_ID'] ?? '';
-    final androidClientId = dotenv.env['ANDROID_CLIENT_ID'] ?? '';
 
-    if (webClientId.isEmpty) {
-      throw Exception('WEB_CLIENT_ID is not configured in .env file');
-    }
-
-    final GoogleSignIn googleSignIn = GoogleSignIn(
-      scopes: ['email', 'profile'],
-      clientId: Platform.isIOS ? iosClientId : (Platform.isAndroid ? androidClientId : null),
-      serverClientId: webClientId,
-    );
-
-    // 🔥 SIMPLE & SAFE: Just sign out (disconnect is not needed for account picker)
-    await googleSignIn.signOut();
-
-    // Now sign in - this will show account picker
-    final googleUser = await googleSignIn.signIn();
-    if (googleUser == null) {
-      throw Exception('Google sign-in aborted by user');
-    }
-
-    final googleAuth = await googleUser.authentication;
-    final accessToken = googleAuth.accessToken;
-    final idToken = googleAuth.idToken;
-
-    if (accessToken == null || idToken == null) {
-      throw Exception('Missing Google credentials');
-    }
-
-    final response = await _supabase.auth.signInWithIdToken(
-      provider: OAuthProvider.google,
-      idToken: idToken,
-      accessToken: accessToken,
-    );
-
-    if (response.session != null && response.user != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
-
-      final user = response.user!;
+  static Future<bool> signInWithGoogle(BuildContext context) async {
+    try {
+      // Load environment variables
+      await dotenv.load();
       
-      // Create user profile
-      try {
-        final profileExists = await _supabase
-            .from('user_profiles')
-            .select('id')
-            .eq('id', user.id)
-            .maybeSingle();
+      final webClientId = dotenv.env['WEB_CLIENT_ID'] ?? '';
+      final iosClientId = dotenv.env['IOS_CLIENT_ID'] ?? '';
+      final androidClientId = dotenv.env['ANDROID_CLIENT_ID'] ?? '';
 
-        if (profileExists == null) {
-          await _supabase.from('user_profiles').insert({
-            'id': user.id,
-            'username': user.userMetadata?['full_name'] ?? googleUser.displayName ?? 'User',
-            'bio': null,
-            'updated_at': DateTime.now().toIso8601String(),
-          });
-          print("✅ User profile created for Google user: ${user.id}");
-        }
-      } catch (e) {
-        print('Error creating user profile: $e');
+      if (webClientId.isEmpty) {
+        throw Exception('WEB_CLIENT_ID is not configured in .env file');
       }
 
-      print("✅ Google sign-in success: ${user.email}");
-      return true;
-    } else {
-      throw Exception('Supabase Google sign-in failed');
-    }
-  } catch (e) {
-    print("❌ Google Sign-in Error: $e");
-    
-    if (context.mounted) {
-      String errorMessage = 'Google Sign-in failed';
-      
-      if (e is PlatformException) {
-        errorMessage = 'Google Sign-in failed: ${e.message ?? e.code}';
-      } else if (e is AuthException) {
-        errorMessage = 'Authentication error: ${e.message}';
-      } else {
-        errorMessage = 'Google Sign-in failed: ${e.toString()}';
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            errorMessage,
-            style: TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          duration: const Duration(seconds: 4),
-        ),
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
+        clientId: Platform.isIOS ? iosClientId : (Platform.isAndroid ? androidClientId : null),
+        serverClientId: webClientId,
       );
-    }
 
-    return false;
+      // 🔥 SIMPLE & SAFE: Just sign out (disconnect is not needed for account picker)
+      await googleSignIn.signOut();
+
+      // Now sign in - this will show account picker
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        throw Exception('Google sign-in aborted by user');
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final accessToken = googleAuth.accessToken;
+      final idToken = googleAuth.idToken;
+
+      if (accessToken == null || idToken == null) {
+        throw Exception('Missing Google credentials');
+      }
+
+      final response = await _supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      if (response.session != null && response.user != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', true);
+
+        final user = response.user!;
+        
+        // UPDATED: Create user profile with role for Google user
+        try {
+          final profileExists = await _supabase
+              .from('user_profiles')
+              .select('id')
+              .eq('id', user.id)
+              .maybeSingle();
+
+          if (profileExists == null) {
+            await _supabase.from('user_profiles').insert({
+              'id': user.id,
+              'username': user.userMetadata?['full_name'] ?? googleUser.displayName ?? 'User',
+              'bio': null,
+              'role': 'user', // Set role to 'user'
+              'updated_at': DateTime.now().toIso8601String(),
+            });
+            print("✅ User profile created with role 'user' for Google user: ${user.id}");
+          } else {
+            // Ensure role is set for existing profiles
+            await _supabase.from('user_profiles').update({
+              'role': 'user',
+              'updated_at': DateTime.now().toIso8601String(),
+            }).eq('id', user.id);
+            print("✅ User role updated to 'user' for Google user: ${user.id}");
+          }
+        } catch (e) {
+          print('Error creating user profile: $e');
+        }
+
+        print("✅ Google sign-in success: ${user.email}");
+        return true;
+      } else {
+        throw Exception('Supabase Google sign-in failed');
+      }
+    } catch (e) {
+      print("❌ Google Sign-in Error: $e");
+      
+      if (context.mounted) {
+        String errorMessage = 'Google Sign-in failed';
+        
+        if (e is PlatformException) {
+          errorMessage = 'Google Sign-in failed: ${e.message ?? e.code}';
+        } else if (e is AuthException) {
+          errorMessage = 'Authentication error: ${e.message}';
+        } else {
+          errorMessage = 'Google Sign-in failed: ${e.toString()}';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              errorMessage,
+              style: TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+
+      return false;
+    }
   }
-}
 
   // NEW: Update user profile with sign-in method (for phone/email sign-in)
   static Future<void> updateUserSignInMethod(String userId, String method) async {
@@ -328,91 +348,95 @@ static Future<bool> signInWithGoogle(BuildContext context) async {
     }
   }
 
-
-
-  // Add these methods to your AuthService class
-
-// Sign in with email
-static Future<void> signInWithEmail({
-  required String email,
-  required Function(String) onCodeSent,
-  required Function(String) onError,
-}) async {
-  try {
-    print('Attempting to send OTP to email: $email');
-    
-    await _supabase.auth.signInWithOtp(
-      email: email,
-    );
-    
-    print('OTP sent successfully to: $email');
-    
-    onCodeSent('Verification code sent to $email');
-  } on AuthException catch (e) {
-    print('AuthException: ${e.message}');
-    onError('Authentication error: ${e.message}');
-  } catch (e) {
-    print('General error: $e');
-    onError('Failed to send verification code. Please try again.');
-  }
-}
-
-// Verify email OTP
-static Future<void> verifyEmailOTP({
-  required String email,
-  required String token,
-  required Function(User) onSuccess,
-  required Function(String) onError,
-}) async {
-  try {
-    print('Verifying OTP for email: $email');
-    
-    await _supabase.auth.verifyOTP(
-      email: email,
-      token: token,
-      type: OtpType.email,
-    );
-    
-    final user = _supabase.auth.currentUser;
-    
-    if (user != null) {
-      print('User verified successfully: ${user.id}');
+  // Sign in with email
+  static Future<void> signInWithEmail({
+    required String email,
+    required Function(String) onCodeSent,
+    required Function(String) onError,
+  }) async {
+    try {
+      print('Attempting to send OTP to email: $email');
       
-      // ✅ CREATE USER PROFILE FOR EMAIL USER
-      try {
-        final profileExists = await _supabase
-            .from('user_profiles')
-            .select('id')
-            .eq('id', user.id)
-            .maybeSingle();
-
-        if (profileExists == null) {
-          // Create new user profile for email user
-          await _supabase.from('user_profiles').insert({
-            'id': user.id,
-            'username': email.split('@').first, // Use email prefix as username
-            'bio': null, // Empty bio initially
-            'updated_at': DateTime.now().toIso8601String(),
-          });
-          print("✅ User profile created for email user: ${user.id}");
-        }
-      } catch (e) {
-        print('Error creating user profile for email user: $e');
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
+      await _supabase.auth.signInWithOtp(
+        email: email,
+      );
       
-      onSuccess(user);
-    } else {
-      onError('Verification failed. Please try again.');
+      print('OTP sent successfully to: $email');
+      
+      onCodeSent('Verification code sent to $email');
+    } on AuthException catch (e) {
+      print('AuthException: ${e.message}');
+      onError('Authentication error: ${e.message}');
+    } catch (e) {
+      print('General error: $e');
+      onError('Failed to send verification code. Please try again.');
     }
-  } on AuthException catch (e) {
-    print('AuthException during verification: ${e.message}');
-    onError('Verification error: ${e.message}');
-  } catch (e) {
-    print('General verification error: $e');
-    onError('Failed to verify code. Please try again.');
   }
-}
+
+  // Verify email OTP
+  static Future<void> verifyEmailOTP({
+    required String email,
+    required String token,
+    required Function(User) onSuccess,
+    required Function(String) onError,
+  }) async {
+    try {
+      print('Verifying OTP for email: $email');
+      
+      await _supabase.auth.verifyOTP(
+        email: email,
+        token: token,
+        type: OtpType.email,
+      );
+      
+      final user = _supabase.auth.currentUser;
+      
+      if (user != null) {
+        print('User verified successfully: ${user.id}');
+        
+        // ✅ UPDATED: CREATE USER PROFILE FOR EMAIL USER WITH ROLE
+        try {
+          final profileExists = await _supabase
+              .from('user_profiles')
+              .select('id')
+              .eq('id', user.id)
+              .maybeSingle();
+
+          if (profileExists == null) {
+            // Create new user profile for email user with role
+            await _supabase.from('user_profiles').insert({
+              'id': user.id,
+              'username': email.split('@').first, // Use email prefix as username
+              'bio': null, // Empty bio initially
+              'role': 'user', // Set role to 'user'
+              'updated_at': DateTime.now().toIso8601String(),
+            });
+            print("✅ User profile created with role 'user' for email user: ${user.id}");
+          } else {
+            // Ensure role is set for existing profiles
+            await _supabase.from('user_profiles').update({
+              'role': 'user',
+              'updated_at': DateTime.now().toIso8601String(),
+            }).eq('id', user.id);
+            print("✅ User role updated to 'user' for email user: ${user.id}");
+          }
+        } catch (e) {
+          print('Error creating user profile for email user: $e');
+        }
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', true);
+        
+        onSuccess(user);
+      } else {
+        onError('Verification failed. Please try again.');
+      }
+    } on AuthException catch (e) {
+      print('AuthException during verification: ${e.message}');
+      onError('Verification error: ${e.message}');
+    } catch (e) {
+      print('General verification error: $e');
+      onError('Failed to verify code. Please try again.');
+    }
+  }
 }

@@ -754,7 +754,6 @@ class _TopicNewsCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Headline section - takes full width (Same as NotificationPage)
                 GestureDetector(
                   onTap: () => _launchUrl(context),
                   child: Container(

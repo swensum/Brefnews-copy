@@ -278,7 +278,7 @@ Future<void> loadVideos() async {
             'get_translated_news_with_notified',
             params: {
               'target_language': _currentLanguage,
-              'limit_count': 100,
+              'limit_count': 300,
               'category_filter': rpcCategoryFilter,
             },
           )
