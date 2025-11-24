@@ -51,21 +51,21 @@ final localizations = AppLocalizations.of(context)!;
   );
 
   try {
-    // Insert the overlay
+ 
     overlayState.insert(overlayEntry);
 
-    // Wait for 1.5 seconds to show dialog and ensure auth state updates
+  
     await Future.delayed(Duration(milliseconds: 1500));
 
-    // Remove the overlay
+  
     overlayEntry.remove();
 if (!mounted) return;
-    // Navigate to profile
+  
     if (context.mounted) {
       context.go('/profile');
     }
   } catch (e) {
-    // If anything fails, ensure overlay is removed and still navigate
+   
     overlayEntry.remove();
     if (context.mounted) {
       context.go('/profile');
