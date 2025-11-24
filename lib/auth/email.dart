@@ -158,21 +158,21 @@ final localizations = AppLocalizations.of(context)!;
     );
 
     try {
-      // Insert the overlay
+      
       overlayState.insert(overlayEntry);
 
-      // Wait for 1.5 seconds to show dialog and ensure auth state updates
+     
       await Future.delayed(Duration(milliseconds: 1500));
 
-      // Remove the overlay
+  
       overlayEntry.remove();
 
-      // Navigate to profile
+ 
       if (mounted) {
         context.go('/profile');
       }
     } catch (e) {
-      // If anything fails, ensure overlay is removed and still navigate
+     
       overlayEntry.remove();
       if (mounted) {
         context.go('/profile');
@@ -214,7 +214,7 @@ final localizations = AppLocalizations.of(context)!;
             SizedBox(height: screenHeight * 0.05),
 
             if (!_isOtpSent) ...[
-              // Email Input Section
+             
               Text(
                 localizations.enterEmailForCode,
                 style: TextStyle(
