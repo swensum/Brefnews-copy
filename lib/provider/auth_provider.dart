@@ -11,14 +11,14 @@ class AuthProvider with ChangeNotifier {
   String? _userPhotoUrl;
   String? _userEmail;
   String? _userId;
-  String? _signInMethod; // Add this line
+  String? _signInMethod; 
 
   bool get isSignedIn => _isSignedIn;
   String? get userName => _userName;
   String? get userPhotoUrl => _userPhotoUrl;
   String? get userEmail => _userEmail;
   String? get userId => _userId;
-  String? get signInMethod => _signInMethod; // Add this getter
+  String? get signInMethod => _signInMethod; 
 
   final SupabaseClient _supabase = Supabase.instance.client;
 
@@ -40,7 +40,7 @@ class AuthProvider with ChangeNotifier {
         _userPhotoUrl = userData['photoURL'];
         _userEmail = userData['email'];
         _userId = userData['id'];
-        _signInMethod = userData['signInMethod']; // Add this line
+        _signInMethod = userData['signInMethod']; 
       } else {
         _clearUserData();
       }
@@ -64,43 +64,6 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Phone sign-in methods
-  Future<void> signInWithPhone({
-    required String phone,
-    required Function(String) onCodeSent,
-    required Function(String) onError,
-  }) async {
-    try {
-      await AuthService.signInWithPhone(
-        phone: phone,
-        onCodeSent: onCodeSent,
-        onError: onError,
-      );
-    } catch (e) {
-      onError('Failed to send verification code');
-    }
-  }
-
-  Future<void> verifyPhoneOTP({
-    required String phone,
-    required String token,
-    required Function onSuccess,
-    required Function(String) onError,
-  }) async {
-    try {
-      await AuthService.verifyOTP(
-        phone: phone,
-        token: token,
-        onSuccess: (user) async {
-          await checkAuthStatus();
-          onSuccess();
-        },
-        onError: onError,
-      );
-    } catch (e) {
-      onError('Verification failed');
-    }
-  }
 
   // Email sign-in methods
   Future<void> signInWithEmail({
@@ -115,7 +78,7 @@ class AuthProvider with ChangeNotifier {
         onError: onError,
       );
     } catch (e) {
-      onError('Failed to send verification code');
+     onError('Failed to send verification code: ${e.toString()}');
     }
   }
 
@@ -170,17 +133,17 @@ class AuthProvider with ChangeNotifier {
       'email': _userEmail,
       'displayName': _userName,
       'photoURL': _userPhotoUrl,
-      'signInMethod': _signInMethod, // Add this line
+      'signInMethod': _signInMethod, 
     };
   }
 
-  // Helper method to clear all user data
+  
   void _clearUserData() {
     _isSignedIn = false;
     _userName = null;
     _userPhotoUrl = null;
     _userEmail = null;
     _userId = null;
-    _signInMethod = null; // Add this line
+    _signInMethod = null;
   }
 }

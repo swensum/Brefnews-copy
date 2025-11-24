@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../auth/email.dart';
-import '../auth/phone.dart';
+
 import '../component/bookmark.dart';
 import '../component/editprofile.dart';
 import '../component/feedback.dart';
@@ -322,30 +322,6 @@ class AppRouter {
           );
         },
       ),
-      GoRoute(
-        path: '/phone-login',
-        pageBuilder: (context, state) {
-          return CustomTransitionPage(
-            key: state.pageKey,
-            child: const PhoneLoginScreen(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(1.0, 0.0),
-                  end: Offset.zero,
-                ).animate(CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeInOut,
-                )),
-                child: child,
-              );
-            },
-          );
-        },
-      ),
-      
-     
-      // Notifications route with consistent sliding animation
 GoRoute(
   path: '/notifications',
   pageBuilder: (context, state) {
