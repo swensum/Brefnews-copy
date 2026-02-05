@@ -4,12 +4,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:marvelous_carousel/marvelous_carousel.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+
 import '../language/app_localizations.dart';
 import '../provider/news_provider.dart';
 import '../models/news_model.dart';
+import '../repositories/marvelous_carousel.dart';
 import '../utilities/share_utils.dart';
+import '../utilities/webview_screen.dart';
 
 class TopicsDetailPage extends StatefulWidget {
   final Map<String, dynamic> topic;
@@ -33,6 +35,9 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
   List<News> _topicNews = [];
   bool _isInitialized = false;
   late String _topicName;
+  
+  // Track which articles have been marked as read
+  final Set<String> _markedAsReadIds = {};
 
   @override
   void initState() {
@@ -159,16 +164,16 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
         }
 
         return MarvelousCarousel(
-          pagerType: PagerType.stack,
-          margin: 8,
-          scrollDirection: Axis.vertical,
-          reverse: true,
-          dotsVisible: false,
+          
+          margin: 1,
+         
           onPageChanged: (index) {
             if (mounted) {
               setState(() {
                 _currentPage = index;
               });
+              // Mark the newly active card as read
+              _markNewsAsRead(_topicNews[index].id);
             }
           },
           children: _topicNews.asMap().entries.map((entry) {
@@ -189,6 +194,8 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
                   isClickedNews: widget.initialNews != null && 
                       index == 0 && 
                       news.id == widget.initialNews!.id,
+                  // Mark as read if active and hasn't been marked yet
+                  onBecomeActive: () => _markNewsAsRead(news.id),
                 ),
               ),
             );
@@ -197,8 +204,23 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
       },
     );
   }
+  
+  void _markNewsAsRead(String newsId) {
+    if (!_markedAsReadIds.contains(newsId)) {
+      final news = _topicNews.firstWhere((n) => n.id == newsId);
+      final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+      if (!newsProvider.isRead(news)) {
+        newsProvider.markAsRead(news);
+        print('📖 [Topic] Marked article as read: ${news.title}');
+      }
+      _markedAsReadIds.add(newsId);
+    }
+  }
 
   Widget _buildSingleNews(News news) {
+    // Mark the single news as read
+    _markNewsAsRead(news.id);
+    
     return Center(
       child: Padding(
         padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.001),
@@ -206,6 +228,7 @@ class _TopicsDetailPageState extends State<TopicsDetailPage>
           news: news,
           isActive: true,
           isClickedNews: widget.initialNews != null && news.id == widget.initialNews!.id,
+          onBecomeActive: () => _markNewsAsRead(news.id),
         ),
       ),
     );
@@ -291,7 +314,7 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
           child: Icon(
             Icons.share,
             size: widget.size,
-            color: _isTapped ? Theme.of(context).colorScheme.primary:Theme.of(context).colorScheme.onSecondaryFixed,
+            color: _isTapped ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSecondaryFixed,
           ),
         ),
       ),
@@ -299,101 +322,544 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
   }
 }
 
-class _TopicNewsCard extends StatelessWidget {
+class _TopicNewsCard extends StatefulWidget {
   final News news;
   final bool isActive;
   final bool isClickedNews;
-  final GlobalKey shareKey = GlobalKey();
+  final VoidCallback? onBecomeActive;
 
-  _TopicNewsCard({
+  const _TopicNewsCard({
     required this.news,
     required this.isActive,
     required this.isClickedNews,
+    this.onBecomeActive,
   });
 
+  @override
+  State<_TopicNewsCard> createState() => _TopicNewsCardState();
+}
+
+class _TopicNewsCardState extends State<_TopicNewsCard> {
+  final GlobalKey shareKey = GlobalKey();
+  bool _isBookmarkOrShareTap = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // If card becomes active, mark it as read
+    if (widget.isActive && widget.onBecomeActive != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onBecomeActive!();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(_TopicNewsCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If card becomes active, mark it as read
+    if (widget.isActive && !oldWidget.isActive && widget.onBecomeActive != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onBecomeActive!();
+      });
+    }
+  }
+
   Future<void> _shareNewsCard(BuildContext context) async {
+    // Set flag to prevent card tap
+    _isBookmarkOrShareTap = true;
+    
     await ShareUtils.shareNewsCard(
       globalKey: shareKey,
-      news: news,
+      news: widget.news,
       context: context,
     );
+    
+    // Reset flag after a short delay
+    Future.delayed(Duration(milliseconds: 100), () {
+      _isBookmarkOrShareTap = false;
+    });
   }
 
   Future<void> _launchUrl(BuildContext context) async {
-  String rawUrl = news.sourceUrl.trim();
-  
-  if (rawUrl.isEmpty) {
-    _showErrorSnackBar(context, "Invalid URL");
-    return;
-  }
+    // Don't launch if it was a bookmark/share tap
+    if (_isBookmarkOrShareTap) {
+      _isBookmarkOrShareTap = false;
+      return;
+    }
+    
+    String rawUrl = widget.news.sourceUrl.trim();
+    
+    print('🟢 [WebView Debug] Original URL: $rawUrl');
+    
+    if (rawUrl.isEmpty) {
+      return;
+    }
 
-  // Ensure URL has proper scheme
-  if (!rawUrl.startsWith("http")) {
-    rawUrl = "https://$rawUrl";
-  }
+    rawUrl = rawUrl.replaceAll(RegExp(r'^https?://'), '');
+    rawUrl = 'https://$rawUrl';
+    
+    print('🟢 [WebView Debug] Secure URL: $rawUrl');
 
-  final Uri url = Uri.parse(rawUrl);
-
-  try {
-    // For iOS, use external launch for better compatibility
-    if (Theme.of(context).platform == TargetPlatform.iOS) {
-      bool launched = await launchUrl(
-        url,
-        mode: LaunchMode.externalApplication,
+    try {
+      if (!context.mounted) return;
+      
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => WebViewScreen(
+            url: rawUrl,
+            title: widget.news.source.isEmpty ? 'News Article' : widget.news.source,
+          ),
+        ),
       );
       
-      if (!launched && context.mounted) {
-        _showErrorSnackBar(context, "Could not launch URL");
-      }
-    } else {
-      // For Android, use platform default
-      bool launched = await launchUrl(
-        url,
-        mode: LaunchMode.platformDefault,
-      );
-      
-      if (!launched && context.mounted) {
-        _showErrorSnackBar(context, "Could not launch URL");
-      }
-    }
-  } catch (e) {
-    if (context.mounted) {
-      _showErrorSnackBar(context, "Error: ${e.toString()}");
-      if (Theme.of(context).platform == TargetPlatform.iOS) {
-        try {
-          await launchUrl(
-            Uri.parse('x-web-search://?$rawUrl'),
-            mode: LaunchMode.externalApplication,
-          );
-        } catch (fallbackError) {
-             if(!context.mounted) return;
-          _showErrorSnackBar(context, "Please check your URL format");
-        }
-      }
+    } catch (e) {
+      print('🔴 [WebView Debug] WebView failed: $e');
     }
   }
-}
 
-  void _showErrorSnackBar(BuildContext context, String message) {
+  void _toggleBookmark(BuildContext context) {
+    // Set flag to prevent card tap
+    _isBookmarkOrShareTap = true;
+    
+    final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+    bool isBookmarked = newsProvider.isBookmarked(widget.news);
+    
+    newsProvider.toggleBookmark(widget.news);
+    _showBookmarkDialog(context, !isBookmarked);
+    
+    // Reset flag after a short delay
+    Future.delayed(Duration(milliseconds: 100), () {
+      _isBookmarkOrShareTap = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final maxImageHeight = screenHeight * 0.33;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: TextStyle(fontSize: screenWidth * 0.035)),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 3),
+    return RepaintBoundary(
+      key: shareKey,
+      child: Padding(
+        padding: EdgeInsets.all(screenWidth * 0.001),
+        child: GestureDetector(
+          onTap: () => _launchUrl(context),
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 8, spreadRadius: 2),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (widget.news.imageUrl != null && widget.news.imageUrl!.isNotEmpty)
+                        _buildNewsImage(context, maxImageHeight)
+                      else
+                        _buildPlaceholderImage(maxImageHeight, screenWidth),
+                      Positioned(
+                        top: screenWidth * 0.02,
+                        right: screenWidth * 0.02,
+                        child: GestureDetector(
+                          onTap: () => _showThreeDotMenu(context),
+                          child: Container(
+                            width: screenWidth * 0.08,
+                            height: screenWidth * 0.08,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.6),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: screenWidth * 0.008,
+                                  height: screenWidth * 0.008,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                SizedBox(width: screenWidth * 0.005),
+                                Container(
+                                  width: screenWidth * 0.008,
+                                  height: screenWidth * 0.008,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                SizedBox(width: screenWidth * 0.005),
+                                Container(
+                                  width: screenWidth * 0.008,
+                                  height: screenWidth * 0.008,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: -screenWidth * 0.039,
+                        left: screenWidth * 0.01,
+                        child: GestureDetector(
+                          onTap: () {
+                            // Prevent URL launch when logo is tapped
+                            _isBookmarkOrShareTap = true;
+                            Future.delayed(Duration(milliseconds: 100), () {
+                              _isBookmarkOrShareTap = false;
+                            });
+                          },
+                          child: Container(
+                            padding: EdgeInsets.zero,
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.asset(
+                                'assets/brefnews.png',
+                                color: Theme.of(context).colorScheme.onSurface,
+                                width: screenWidth * 0.25,
+                                height: screenWidth * 0.08,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                     
+                      Positioned(
+                        bottom: -screenWidth * 0.045,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: () {
+                            // Prevent URL launch when the entire icon container is tapped
+                            _isBookmarkOrShareTap = true;
+                            Future.delayed(Duration(milliseconds: 100), () {
+                              _isBookmarkOrShareTap = false;
+                            });
+                          },
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: screenWidth * 0.02,
+                              vertical: screenWidth * 0.01,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Consumer<NewsProvider>(
+                                  builder: (context, newsProvider, child) {
+                                    bool isBookmarked = newsProvider.isBookmarked(widget.news);
+                                    return GestureDetector(
+                                      onTap: () => _toggleBookmark(context),
+                                      child: Icon(
+                                        isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                                        size: screenWidth * 0.05,
+                                        color: isBookmarked ? Theme.of(context).colorScheme.primary
+                                            : Theme.of(context).colorScheme.onSecondaryFixed,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                SizedBox(width: screenWidth * 0.02),
+                                _AnimatedShareIcon(
+                                  onTap: () => _shareNewsCard(context),
+                                  size: screenWidth * 0.05,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        screenWidth * 0.04,
+                        screenHeight * 0.02,
+                        screenWidth * 0.04,
+                        screenHeight * 0.015,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Title
+                          Text(
+                            widget.news.title,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontSize: Platform.isIOS
+                                  ? screenWidth * 0.042
+                                  : screenWidth * 0.042,
+                              fontWeight: FontWeight.bold,
+                              height: Platform.isIOS ? 1.3 : 1.3,
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: screenHeight * 0.01),
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Summary Text
+                                Text(
+                                  widget.news.summary,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium?.color,
+                                    fontSize: Platform.isIOS
+                                        ? screenWidth * 0.035
+                                        : screenWidth * 0.035,
+                                    height: Platform.isIOS ? 1.6 : 1.4,
+                                  ),
+                                ),
+                                SizedBox(height: screenHeight * 0),
+                            
+                                // Source and Time Info
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: screenHeight * 0.008,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    children: [
+                                      // Source
+                                      Flexible(
+                                        child: Text(
+                                          widget.news.source,
+                                          style: TextStyle(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
+                                            fontSize: Platform.isIOS
+                                                ? screenWidth * 0.03
+                                                : screenWidth * 0.03,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ),
+                            
+                                      SizedBox(width: screenWidth * 0.02),
+                            
+                                      // Dot separator
+                                      Container(
+                                        width: screenWidth * 0.01,
+                                        height: screenWidth * 0.01,
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      SizedBox(width: screenWidth * 0.02),
+                            
+                                      Text(
+                                        widget.news.timeAgo,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
+                                          fontSize: Platform.isIOS
+                                              ? screenWidth * 0.03
+                                              : screenWidth * 0.03,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => _launchUrl(context),
+                    child: Container(
+                      width: double.infinity,
+                      height: screenHeight * 0.07,
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                        image: widget.news.imageUrl != null && widget.news.imageUrl!.isNotEmpty
+                            ? DecorationImage(
+                                image: NetworkImage(widget.news.imageUrl!),
+                                fit: BoxFit.cover,
+                                colorFilter: ColorFilter.mode(
+                                  Colors.black.withValues(alpha: 0.6),
+                                  BlendMode.darken,
+                                ),
+                              )
+                            : null,
+                        color: widget.news.imageUrl == null || widget.news.imageUrl!.isEmpty
+                            ? Colors.grey[800]
+                            : null,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                          child: Container(
+                            padding: EdgeInsets.only(left: screenWidth * 0.04),
+                            decoration: BoxDecoration(
+                              borderRadius: const BorderRadius.only(
+                                bottomLeft: Radius.circular(16),
+                                bottomRight: Radius.circular(16),
+                              ),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.0),
+                                  Colors.black.withValues(alpha: 0.35),
+                                ],
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (widget.news.headline != null &&
+                                    widget.news.headline!['headline'] != null)
+                                  Text(
+                                    widget.news.headline!['headline'],
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      fontSize: Platform.isIOS
+                                          ? screenWidth * 0.039
+                                          : screenWidth * 0.037,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    textAlign: TextAlign.left,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                if (widget.news.headline != null &&
+                                    widget.news.headline!['subheadline'] != null)
+                                  Text(
+                                    widget.news.headline!['subheadline'],
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      fontSize: Platform.isIOS
+                                          ? screenWidth * 0.032
+                                          : screenWidth * 0.03,
+                                    ),
+                                    textAlign: TextAlign.left,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 
+  Widget _buildNewsImage(BuildContext context, double maxImageHeight) {
+    return GestureDetector(
+      onTap: () => _showImagePreview(context),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        child: SizedBox(
+          height: maxImageHeight,
+          width: double.infinity,
+          child: Image.network(
+            widget.news.imageUrl!,
+            width: double.infinity,
+            height: maxImageHeight,
+            fit: BoxFit.cover,
+            alignment: Alignment.topLeft,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                width: double.infinity,
+                height: maxImageHeight,
+                color: Colors.grey[300],
+                child: Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                        : null,
+                  ),
+                ),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return _buildPlaceholderImage(
+                maxImageHeight,
+                MediaQuery.of(context).size.width,
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderImage(double height, double screenWidth) {
+    return Container(
+      height: height,
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        color: Colors.grey,
+      ),
+      child: Icon(Icons.article, color: Colors.white, size: screenWidth * 0.12),
+    );
+  }
+
   void _showImagePreview(BuildContext context) {
-    if (news.imageUrl == null || news.imageUrl!.isEmpty) return;
+    if (widget.news.imageUrl == null || widget.news.imageUrl!.isEmpty) return;
 
     showDialog(
       context: context,
       barrierColor: Colors.black87,
       builder: (BuildContext context) {
-        return _ImagePreviewDialog(news: news);
+        return _ImagePreviewDialog(news: widget.news);
       },
     );
   }
@@ -464,7 +930,6 @@ class _TopicNewsCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Share Feedback on Short Option
             ListTile(
               leading: Icon(Icons.feedback, color: Colors.black87),
               title: Text(
@@ -487,418 +952,14 @@ class _TopicNewsCard extends StatelessWidget {
   }
 
   void _shareFeedbackOnShort(BuildContext context) {
-    // Close the bottom sheet first using a post-frame callback
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Then navigate to feedback page
       context.push('/feedback-detail', extra: {
-        'newsHeadline': news.title,
+        'newsHeadline': widget.news.title,
         'onFeedbackSubmitted': (String type, String text, String headline) {
-          // Handle feedback submission callback if needed
           print('Feedback submitted: $type - $text');
         }
       });
     });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final maxImageHeight = screenHeight * 0.35;
-
-    return RepaintBoundary(
-      key: shareKey,
-      child: Padding(
-        padding: EdgeInsets.all(screenWidth * 0.001),
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: const [
-                BoxShadow(color: Colors.black12, blurRadius: 8, spreadRadius: 2),
-              ],
-            ),
-            child: Column(
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    if (news.imageUrl != null && news.imageUrl!.isNotEmpty)
-                      _buildNewsImage(context, maxImageHeight)
-                    else
-                      _buildPlaceholderImage(maxImageHeight, screenWidth),
-                    Positioned(
-                      top: screenWidth * 0.02,
-                      right: screenWidth * 0.02,
-                      child: GestureDetector(
-                        onTap: () => _showThreeDotMenu(context),
-                        child: Container(
-                          width: screenWidth * 0.08,
-                          height: screenWidth * 0.08,
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.6),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: screenWidth * 0.008,
-                                height: screenWidth * 0.008,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              SizedBox(width: screenWidth * 0.005),
-                              Container(
-                                width: screenWidth * 0.008,
-                                height: screenWidth * 0.008,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              SizedBox(width: screenWidth * 0.005),
-                              Container(
-                                width: screenWidth * 0.008,
-                                height: screenWidth * 0.008,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: -screenWidth * 0.039,
-                      left: screenWidth * 0.01,
-                      child: Container(
-                        padding: EdgeInsets.zero,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.asset(
-                            'assets/brefnews.png',
-                            color: Theme.of(context).colorScheme.onSurface,
-                            width: screenWidth * 0.25,
-                            height: screenWidth * 0.08,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    ),
-                   
-                    Positioned(
-                      bottom: -screenWidth * 0.03,
-                      right: 0,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: screenWidth * 0.02,
-                          vertical: screenWidth * 0.01,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Consumer<NewsProvider>(
-                              builder: (context, newsProvider, child) {
-                                bool isBookmarked = newsProvider.isBookmarked(news);
-                                return GestureDetector(
-                                  onTap: () {
-                                    newsProvider.toggleBookmark(news);
-                                    _showBookmarkDialog(context, !isBookmarked);
-                                  },
-                                  child: Icon(
-                                    isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                                    size: screenWidth * 0.052,
-                                    color: isBookmarked ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(context).colorScheme.onSecondaryFixed,
-                                  ),
-                                );
-                              },
-                            ),
-                            SizedBox(width: screenWidth * 0.02),
-                            _AnimatedShareIcon(
-                              onTap: () => _shareNewsCard(context),
-                              size: screenWidth * 0.05,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      screenWidth * 0.04,
-                      screenHeight * 0.02,
-                      screenWidth * 0.04,
-                      screenHeight * 0.015,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Title
-                        Text(
-                          news.title,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface,
-                            fontSize: Platform.isIOS
-                                ? screenWidth * 0.045
-                                : screenWidth * 0.043,
-                            fontWeight: FontWeight.bold,
-                            height: Platform.isIOS ? 1.4 : 1.3,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: screenHeight * 0.01),
-                        Flexible(
-                          fit: FlexFit.loose,
-                          child: SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Summary Text
-                                Text(
-                                  news.summary,
-                                  style: TextStyle(
-                                    color: Theme.of(
-                                      context,
-                                    ).textTheme.titleMedium?.color,
-                                    fontSize: Platform.isIOS
-                                        ? screenWidth * 0.038
-                                        : screenWidth * 0.035,
-                                    height: Platform.isIOS ? 1.6 : 1.4,
-                                  ),
-                                ),
-                                SizedBox(height: screenHeight * 0.015),
-
-                                // Source and Time Info
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    vertical: screenHeight * 0.008,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    children: [
-                                      // Source
-                                      Flexible(
-                                        child: Text(
-                                          news.source,
-                                          style: TextStyle(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.outlineVariant,
-                                            fontSize: Platform.isIOS
-                                                ? screenWidth * 0.034
-                                                : screenWidth * 0.032,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                        ),
-                                      ),
-
-                                      SizedBox(width: screenWidth * 0.02),
-
-                                      // Dot separator
-                                      Container(
-                                        width: screenWidth * 0.01,
-                                        height: screenWidth * 0.01,
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.outlineVariant,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      SizedBox(width: screenWidth * 0.02),
-
-                                      Text(
-                                        news.timeAgo,
-                                        style: TextStyle(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.outlineVariant,
-                                          fontSize: Platform.isIOS
-                                              ? screenWidth * 0.034
-                                              : screenWidth * 0.032,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 1,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => _launchUrl(context),
-                  child: Container(
-                    width: double.infinity,
-                    height: screenHeight * 0.07,
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
-                      ),
-                      image: news.imageUrl != null && news.imageUrl!.isNotEmpty
-                          ? DecorationImage(
-                              image: NetworkImage(news.imageUrl!),
-                              fit: BoxFit.cover,
-                              colorFilter: ColorFilter.mode(
-                                Colors.black.withValues(alpha: 0.6),
-                                BlendMode.darken,
-                              ),
-                            )
-                          : null,
-                      color: news.imageUrl == null || news.imageUrl!.isEmpty
-                          ? Colors.grey[800]
-                          : null,
-                    ),
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
-                      ),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-                        child: Container(
-                          padding: EdgeInsets.only(left: screenWidth * 0.04),
-                          decoration: BoxDecoration(
-                            borderRadius: const BorderRadius.only(
-                              bottomLeft: Radius.circular(16),
-                              bottomRight: Radius.circular(16),
-                            ),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.0),
-                                Colors.black.withValues(alpha: 0.35),
-                              ],
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (news.headline != null &&
-                                  news.headline!['headline'] != null)
-                                Text(
-                                  news.headline!['headline'],
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.9),
-                                    fontSize: Platform.isIOS
-                                        ? screenWidth * 0.039
-                                        : screenWidth * 0.037,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  textAlign: TextAlign.left,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              if (news.headline != null &&
-                                  news.headline!['subheadline'] != null)
-                                Text(
-                                  news.headline!['subheadline'],
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.9),
-                                    fontSize: Platform.isIOS
-                                        ? screenWidth * 0.032
-                                        : screenWidth * 0.03,
-                                  ),
-                                  textAlign: TextAlign.left,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNewsImage(BuildContext context, double maxImageHeight) {
-    return GestureDetector(
-      onTap: () => _showImagePreview(context),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        child: SizedBox(
-          height: maxImageHeight,
-          width: double.infinity,
-          child: Image.network(
-            news.imageUrl!,
-            width: double.infinity,
-            height: maxImageHeight,
-            fit: BoxFit.cover,
-            alignment: Alignment.topLeft,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return Container(
-                width: double.infinity,
-                height: maxImageHeight,
-                color: Colors.grey[300],
-                child: Center(
-                  child: CircularProgressIndicator(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded /
-                              loadingProgress.expectedTotalBytes!
-                        : null,
-                  ),
-                ),
-              );
-            },
-            errorBuilder: (context, error, stackTrace) {
-              return _buildPlaceholderImage(
-                maxImageHeight,
-                MediaQuery.of(context).size.width,
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlaceholderImage(double height, double screenWidth) {
-    return Container(
-      height: height,
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        color: Colors.grey,
-      ),
-      child: Icon(Icons.article, color: Colors.white, size: screenWidth * 0.12),
-    );
   }
 }
 

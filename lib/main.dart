@@ -15,7 +15,6 @@ import 'route/route.dart';
 import 'utilities/supabase_init.dart';
 import 'utilities/theme.dart';
 
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
@@ -23,7 +22,7 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await SupabaseInitializer.initialize();
-   
+  
   runApp(const MyApp());
 }
 
@@ -37,8 +36,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (context) => NewsProvider()),
         ChangeNotifierProvider(create: (context) => LanguageProvider()),
-         ChangeNotifierProvider(create: (context) => ThemeProvider()),
-          Provider(create: (_) => NotificationService()),
+        ChangeNotifierProvider(create: (context) => ThemeProvider()),
+        // Initialize NotificationService here
+        ChangeNotifierProvider(
+          create: (_) => NotificationService()..init(),
+          lazy: false, 
+        ),
       ],
       child: Consumer2<ThemeProvider, LanguageProvider>(
         builder: (context, themeProvider, languageProvider, child) {

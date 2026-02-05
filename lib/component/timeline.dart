@@ -28,71 +28,91 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 
   Future<void> _loadHeadlinesWithNews() async {
-    final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+  final newsProvider = Provider.of<NewsProvider>(context, listen: false);
 
-    try {
-      if (mounted) {
-        setState(() {
-          _isLoading = true;
-          _hasError = false;
-        });
-      }
+  try {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+    }
 
-      // Load headlines directly
-      final headlinesResponse = await SupabaseService().client
-          .from('headlines')
-          .select('*')
-          .eq('is_active', true)
-          .order('created_at', ascending: false);
+    // Load headlines directly
+    final headlinesResponse = await SupabaseService().client
+        .from('headlines')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', ascending: false);
 
-      final localHeadlines = List<Map<String, dynamic>>.from(headlinesResponse);
+    final localHeadlines = List<Map<String, dynamic>>.from(headlinesResponse);
+    
+    // DEBUG: Print how many headlines were fetched
+    print('🔵 [Timeline] Fetched ${localHeadlines.length} headlines from Supabase');
+    
+    for (final headline in localHeadlines) {
+      print('🔵 Headline: ${headline['headline_text']}, ID: ${headline['id']}');
+    }
 
-      // Use the NewsProvider method for grouped news
-      final groupedNews = await newsProvider.getNewsGroupedByHeadlines();
+    // Use the NewsProvider method for grouped news
+    final groupedNews = await newsProvider.getNewsGroupedByHeadlines();
+    
+    // DEBUG: Print grouped news
+    print('🔵 [Timeline] Grouped news has ${groupedNews.length} headlines with news');
+    groupedNews.forEach((headlineId, newsList) {
+      print('🔵 Headline ID $headlineId has ${newsList.length} news articles');
+    });
 
-      // Convert the grouped news to our format
-      final List<Map<String, dynamic>> headlinesWithNews = [];
+    // Convert the grouped news to our format
+    final List<Map<String, dynamic>> headlinesWithNews = [];
 
-      for (final headline in localHeadlines) {
-        final headlineId = headline['id'].toString();
-        final newsList = groupedNews[headlineId] ?? [];
+    for (final headline in localHeadlines) {
+      final headlineId = headline['id'].toString();
+      final newsList = groupedNews[headlineId] ?? [];
 
-        // Get the translated headline text
-        final headlineText = _getHeadlineText(
-          headline,
-          newsProvider.currentLanguage,
-        );
+      // Get the translated headline text
+      final headlineText = _getHeadlineText(
+        headline,
+        newsProvider.currentLanguage,
+      );
+      
+      // DEBUG: Print each headline's status
+      print('🔵 Processing headline $headlineId: "$headlineText"');
+      print('🔵 Has ${newsList.length} news articles');
 
-        if (newsList.isNotEmpty) {
-          headlinesWithNews.add({
-            'id': headlineId,
-            'headline_text': headlineText,
-            'headline_image': headline['headline_image'],
-            'created_at': headline['created_at'],
-            'translations': headline['translations'],
-            'news_articles': newsList,
-          });
-        }
-      }
+      // FIX: Remove the "if (newsList.isNotEmpty)" condition to show all headlines
+      // Or keep it but handle empty news case differently
+      headlinesWithNews.add({
+        'id': headlineId,
+        'headline_text': headlineText,
+        'headline_image': headline['headline_image'],
+        'created_at': headline['created_at'],
+        'translations': headline['translations'],
+        'news_articles': newsList, // This can be empty
+      });
+    }
 
-      if (mounted) {
-        setState(() {
-          _headlinesWithNews = headlinesWithNews;
-          _isLoading = false;
-          _currentLanguage = newsProvider.currentLanguage;
-        });
-      }
-    } catch (e) {
-      print('🔴 [Timeline] Failed to load headlines with news: $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-        });
-      }
+    // DEBUG: Final count
+    print('🔵 [Timeline] Final headlinesWithNews count: ${headlinesWithNews.length}');
+
+    if (mounted) {
+      setState(() {
+        _headlinesWithNews = headlinesWithNews;
+        _isLoading = false;
+        _currentLanguage = newsProvider.currentLanguage;
+      });
+    }
+  } catch (e) {
+    print('🔴 [Timeline] Failed to load headlines with news: $e');
+    print('🔴 Stack trace: ${e.toString()}');
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
     }
   }
-
+}
   String _getHeadlineText(Map<String, dynamic> headline, String language) {
     final translations = headline['translations'] as Map<String, dynamic>?;
 

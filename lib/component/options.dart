@@ -28,37 +28,36 @@ class _OptionsPageState extends State<OptionsPage> {
   }
 
   void _checkAuthStatus() async {
-  final authProvider = Provider.of<AuthProvider>(context, listen: false);
-  await authProvider.checkAuthStatus();
-  
-  setState(() {
-    _isSignedIn = authProvider.isSignedIn;
-    if (authProvider.isSignedIn) {
-      _signedInMethod = authProvider.signInMethod ?? ''; // Use the new getter
-      _userName = authProvider.userName;
-      _userEmail = authProvider.userEmail;
-      _userPhotoUrl = authProvider.userPhotoUrl;
-    }
-  });
-}
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    await authProvider.checkAuthStatus();
 
-
- void _handleLogout() async {
-  final authProvider = Provider.of<AuthProvider>(context, listen: false);
-  final success = await authProvider.signOut();
-  
-  if (success && context.mounted) {
     setState(() {
-      _isSignedIn = false;
-      _signedInMethod = '';
-      _userName = null;
-      _userEmail = null;
-      _userPhotoUrl = null;
+      _isSignedIn = authProvider.isSignedIn;
+      if (authProvider.isSignedIn) {
+        _signedInMethod = authProvider.signInMethod ?? ''; // Use the new getter
+        _userName = authProvider.userName;
+        _userEmail = authProvider.userEmail;
+        _userPhotoUrl = authProvider.userPhotoUrl;
+      }
     });
-
-    _showLogoutSuccessDialog();
   }
-}
+
+  void _handleLogout() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final success = await authProvider.signOut();
+
+    if (success && context.mounted) {
+      setState(() {
+        _isSignedIn = false;
+        _signedInMethod = '';
+        _userName = null;
+        _userEmail = null;
+        _userPhotoUrl = null;
+      });
+
+      _showLogoutSuccessDialog();
+    }
+  }
 
   void _showLogoutSuccessDialog() {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -129,7 +128,10 @@ class _OptionsPageState extends State<OptionsPage> {
 
   // Add this method for language bottom sheet
   void _showLanguageBottomSheet() {
-    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final languageProvider = Provider.of<LanguageProvider>(
+      context,
+      listen: false,
+    );
     final localizations = AppLocalizations.of(context)!;
     final screenHeight = MediaQuery.of(context).size.height;
 
@@ -138,9 +140,7 @@ class _OptionsPageState extends State<OptionsPage> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       isScrollControlled: true,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(20),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => Container(
         height: screenHeight * 0.8,
@@ -160,23 +160,31 @@ class _OptionsPageState extends State<OptionsPage> {
                   ),
                 ),
                 IconButton(
-                  icon: Icon(Icons.close, color: Theme.of(context).colorScheme.onSurface),
+                  icon: Icon(
+                    Icons.close,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                   onPressed: () => Navigator.pop(context),
                 ),
               ],
             ),
             SizedBox(height: 16),
-            
+
             // Current language display
             Container(
               padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha:  0.1),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.language, color: Theme.of(context).colorScheme.primary),
+                  Icon(
+                    Icons.language,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -191,38 +199,46 @@ class _OptionsPageState extends State<OptionsPage> {
                 ],
               ),
             ),
-            
+
             SizedBox(height: 20),
-            
+
             // Language list
             Expanded(
               child: ListView.builder(
                 itemCount: languageProvider.supportedLanguageNames.length,
                 itemBuilder: (context, index) {
-                  final languageName = languageProvider.supportedLanguageNames[index];
-                  final languageCode = languageProvider.supportedLanguageCodes[index];
-                  
+                  final languageName =
+                      languageProvider.supportedLanguageNames[index];
+                  final languageCode =
+                      languageProvider.supportedLanguageCodes[index];
+
                   return GestureDetector(
-                    
                     onTap: () async {
-                      
                       await languageProvider.setLanguage(languageCode);
-                        if (!context.mounted) return;
-                      final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+                      if (!context.mounted) return;
+                      final newsProvider = Provider.of<NewsProvider>(
+                        context,
+                        listen: false,
+                      );
                       await newsProvider.setLanguage(languageCode);
-                        if (!context.mounted) return;
+                      if (!context.mounted) return;
                       // Show snackbar for restart recommendation
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Language changed to $languageName. Some text may require app restart.'),
+                          content: Text(
+                            'Language changed to $languageName. Some text may require app restart.',
+                          ),
                           duration: Duration(seconds: 3),
                         ),
                       );
-                        if (!context.mounted) return;
+                      if (!context.mounted) return;
                       Navigator.pop(context);
                     },
                     child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
@@ -243,7 +259,7 @@ class _OptionsPageState extends State<OptionsPage> {
                               ),
                             ),
                           ),
-                          
+
                           // Checkmark for current language
                           if (languageProvider.currentLanguage == languageCode)
                             Icon(
@@ -282,7 +298,7 @@ class _OptionsPageState extends State<OptionsPage> {
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back,
-            color: Theme.of(context).colorScheme.onSurface, 
+            color: Theme.of(context).colorScheme.onSurface,
             size: screenWidth * 0.06,
           ),
           onPressed: () => Navigator.of(context).pop(),
@@ -290,7 +306,7 @@ class _OptionsPageState extends State<OptionsPage> {
         title: Text(
           localizations.options,
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface, 
+            color: Theme.of(context).colorScheme.onSurface,
             fontWeight: FontWeight.bold,
             fontSize: screenWidth * 0.045,
           ),
@@ -313,7 +329,7 @@ class _OptionsPageState extends State<OptionsPage> {
                           children: [
                             Icon(
                               Icons.person,
-                              color: Theme.of(context).colorScheme.primary, 
+                              color: Theme.of(context).colorScheme.primary,
                               size: screenWidth * 0.05,
                             ),
                             Positioned(
@@ -321,8 +337,10 @@ class _OptionsPageState extends State<OptionsPage> {
                               bottom: 0,
                               child: Container(
                                 padding: const EdgeInsets.all(2),
-                                decoration:  BoxDecoration(
-                                  color: Theme.of(context).colorScheme.onPrimary, 
+                                decoration: BoxDecoration(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimary,
                                   shape: BoxShape.circle,
                                 ),
                                 child: _getAuthMethodIcon(),
@@ -343,7 +361,7 @@ class _OptionsPageState extends State<OptionsPage> {
                       enabled: false,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.onPrimary, 
+                          color: Theme.of(context).colorScheme.onPrimary,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Column(
@@ -374,20 +392,23 @@ class _OptionsPageState extends State<OptionsPage> {
                     value: 'logout',
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.onPrimary, 
+                        color: Theme.of(context).colorScheme.onPrimary,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
                           Icon(Icons.logout, color: Colors.red),
                           SizedBox(width: 8),
-                          Text(localizations.logout, style: TextStyle(color: Colors.black)),
+                          Text(
+                            localizations.logout,
+                            style: TextStyle(color: Colors.black),
+                          ),
                         ],
                       ),
                     ),
                   ),
                 ],
-                color: Theme.of(context).colorScheme.onPrimary, 
+                color: Theme.of(context).colorScheme.onPrimary,
               ),
             ),
         ],
@@ -404,7 +425,9 @@ class _OptionsPageState extends State<OptionsPage> {
                 child: Container(
                   width: double.infinity,
                   padding: EdgeInsets.all(screenWidth * 0.06),
-                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -412,7 +435,7 @@ class _OptionsPageState extends State<OptionsPage> {
                       Text(
                         localizations.saveYourPreferences,
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.onPrimary, 
+                          color: Theme.of(context).colorScheme.onPrimary,
                           fontSize: screenWidth * 0.05,
                           fontWeight: FontWeight.bold,
                         ),
@@ -423,7 +446,7 @@ class _OptionsPageState extends State<OptionsPage> {
                       Text(
                         localizations.signInToSave,
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.onPrimary, 
+                          color: Theme.of(context).colorScheme.onPrimary,
                           fontSize: screenWidth * 0.038,
                           height: 1.4,
                         ),
@@ -436,7 +459,7 @@ class _OptionsPageState extends State<OptionsPage> {
                             width: screenWidth * 0.2,
                             height: screenHeight * 0.07,
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.onPrimary, 
+                              color: Theme.of(context).colorScheme.onPrimary,
                               borderRadius: BorderRadius.circular(
                                 screenWidth * 0.01,
                               ),
@@ -445,7 +468,7 @@ class _OptionsPageState extends State<OptionsPage> {
                               child: Text(
                                 localizations.signIn,
                                 style: TextStyle(
-                                  color: Theme.of(context).colorScheme.primary, 
+                                  color: Theme.of(context).colorScheme.primary,
                                   fontSize: screenWidth * 0.04,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -504,14 +527,13 @@ class _OptionsPageState extends State<OptionsPage> {
 
             Column(
               children: [
-                
                 _buildListOptionWithValue(
                   context,
                   icon: Icons.language,
                   title: localizations.language,
-                  value: languageProvider.currentLanguageName, 
+                  value: languageProvider.currentLanguageName,
                   showDivider: true,
-                  onTap: _showLanguageBottomSheet, 
+                  onTap: _showLanguageBottomSheet,
                 ),
 
                 // Notifications
@@ -520,10 +542,10 @@ class _OptionsPageState extends State<OptionsPage> {
                   icon: Icons.notifications,
                   title: localizations.notifications,
                   showDivider: true,
-                 onTap: () {
-    // Navigate to Notification Settings Page
-    context.push('/notification');
-  },
+                  onTap: () {
+                    // Navigate to Notification Settings Page
+                    context.push('/notification');
+                  },
                 ),
 
                 // Your Preference - Only show if language is English
@@ -550,7 +572,7 @@ class _OptionsPageState extends State<OptionsPage> {
                     children: [
                       Icon(
                         Icons.nightlight_round,
-                        color: Theme.of(context).colorScheme.primary, 
+                        color: Theme.of(context).colorScheme.primary,
                         size: screenWidth * 0.06,
                       ),
                       SizedBox(width: screenWidth * 0.04),
@@ -563,7 +585,7 @@ class _OptionsPageState extends State<OptionsPage> {
                               style: TextStyle(
                                 fontSize: screenWidth * 0.04,
                                 fontWeight: FontWeight.w500,
-                                color: Theme.of(context).colorScheme.onSurface, 
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                             SizedBox(height: screenHeight * 0.005),
@@ -572,7 +594,9 @@ class _OptionsPageState extends State<OptionsPage> {
                               style: TextStyle(
                                 fontSize: screenWidth * 0.032,
                                 fontWeight: FontWeight.w600,
-                                color: Theme.of(context).textTheme.bodyLarge?.color,
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodyLarge?.color,
                               ),
                             ),
                           ],
@@ -621,26 +645,40 @@ class _OptionsPageState extends State<OptionsPage> {
                       _buildWhiteContainerOption(
                         context,
                         title: localizations.feedback,
-                       onTap: () {
-          // Navigate to FeedbackPage
-          context.push('/feedback');
-        },
+                        onTap: () {
+                          // Navigate to FeedbackPage
+                          context.push('/feedback');
+                        },
                       ),
 
                       // Terms & Conditions
                       _buildWhiteContainerOption(
                         context,
                         title: localizations.termsConditions,
-                        onTap: () {},
+                         onTap: () {
+                          context.push('/terms-conditions');
+                        },
                       ),
 
                       // Privacy
                       _buildWhiteContainerOption(
                         context,
                         title: localizations.privacy,
-                        onTap: () {},
+                        onTap: () {
+                          // Navigate to PrivacyPolicyPage
+                          context.push('/privacy');
+                        },
+                      ),
+                       _buildWhiteContainerOption(
+                        context,
+                        title: localizations.contact,
+                        onTap: () {
+                          
+                          context.push('/contact');
+                        },
                       ),
                     ],
+
                   ),
                 ),
               ],
@@ -674,7 +712,7 @@ class _OptionsPageState extends State<OptionsPage> {
           border: Border(
             bottom: showDivider
                 ? BorderSide(
-                    color: Theme.of(context).colorScheme.outline, 
+                    color: Theme.of(context).colorScheme.outline,
                     width: screenWidth * 0.002,
                   )
                 : BorderSide.none,
@@ -682,14 +720,18 @@ class _OptionsPageState extends State<OptionsPage> {
         ),
         child: Row(
           children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary, size: screenWidth * 0.06),
+            Icon(
+              icon,
+              color: Theme.of(context).colorScheme.primary,
+              size: screenWidth * 0.06,
+            ),
             SizedBox(width: screenWidth * 0.04),
             Text(
               title,
               style: TextStyle(
                 fontSize: screenWidth * 0.04,
                 fontWeight: FontWeight.w500,
-                color: Theme.of(context).colorScheme.onSurface, 
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const Spacer(),
@@ -729,7 +771,7 @@ class _OptionsPageState extends State<OptionsPage> {
           border: Border(
             bottom: showDivider
                 ? BorderSide(
-                    color: Theme.of(context).colorScheme.outline, 
+                    color: Theme.of(context).colorScheme.outline,
                     width: screenWidth * 0.002,
                   )
                 : BorderSide.none,
@@ -737,7 +779,11 @@ class _OptionsPageState extends State<OptionsPage> {
         ),
         child: Row(
           children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary, size: screenWidth * 0.06),
+            Icon(
+              icon,
+              color: Theme.of(context).colorScheme.primary,
+              size: screenWidth * 0.06,
+            ),
             SizedBox(width: screenWidth * 0.04),
             Expanded(
               child: Text(
@@ -745,7 +791,7 @@ class _OptionsPageState extends State<OptionsPage> {
                 style: TextStyle(
                   fontSize: screenWidth * 0.04,
                   fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSurface, 
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),
@@ -796,7 +842,7 @@ class _OptionsPageState extends State<OptionsPage> {
             Icon(
               Icons.arrow_forward_ios,
               size: screenWidth * 0.04,
-              color:Theme.of(context).textTheme.bodyLarge?.color,
+              color: Theme.of(context).textTheme.bodyLarge?.color,
             ),
           ],
         ),

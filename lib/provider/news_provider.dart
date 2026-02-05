@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/news_model.dart';
-import '../models/video_model.dart';
 import '../supabase/supabase_client.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -16,10 +15,13 @@ class NewsProvider with ChangeNotifier {
   String _selectedCategory = 'My Feed';
   bool _isLoading = true;
   bool _hasError = false;
+  
   List<Map<String, dynamic>> _topics = [];
   List<Map<String, dynamic>> get topics => _topics;
   List<News> _topicNews = [];
   List<News> get topicNews => _topicNews;
+List<String> _readNewsIds = [];
+  static const String _readNewsKey = 'read_news';
 
   bool _isLoadingTopicNews = false;
   bool get isLoadingTopicNews => _isLoadingTopicNews;
@@ -29,13 +31,14 @@ class NewsProvider with ChangeNotifier {
   String get selectedCategory => _selectedCategory;
   bool get isLoading => _isLoading;
   bool get hasError => _hasError;
-List<VideoArticle> _videos = [];
-  bool _isLoadingVideos = false;
-  String? _videosError;
+  
+// List<VideoArticle> _videos = [];
+//   bool _isLoadingVideos = false;
+//   String? _videosError;
 
-  List<VideoArticle> get videos => _videos;
-  bool get isLoadingVideos => _isLoadingVideos;
-  String? get videosError => _videosError;
+//   List<VideoArticle> get videos => _videos;
+//   bool get isLoadingVideos => _isLoadingVideos;
+//   String? get videosError => _videosError;
   List<String> _bookmarkedNewsIds = [];
   // Language support
   String _currentLanguage = 'en';
@@ -71,7 +74,7 @@ List<VideoArticle> _videos = [];
     'myFeed',
     'finance',
     'timeline',
-    'videos',
+    // 'videos',
     'goodNews',
   ];
   List<String> get categories {
@@ -87,8 +90,8 @@ List<VideoArticle> _videos = [];
             return 'Finance';
           case 'timeline':
             return 'Timeline';
-          case 'videos':
-            return 'Videos';
+          // case 'videos':
+          //   return 'Videos';
           case 'goodNews':
             return 'Good News';
           default:
@@ -115,59 +118,101 @@ List<VideoArticle> _videos = [];
     _initializeApp();
   }
 
-Future<void> loadVideos() async {
-  if (_isLoadingVideos) return;
+// Future<void> loadVideos() async {
+//   if (_isLoadingVideos) return;
   
-  _isLoadingVideos = true;
-  _videosError = null;
-  notifyListeners();
+//   _isLoadingVideos = true;
+//   _videosError = null;
+//   notifyListeners();
 
-  try {
-    // Use the PostgreSQL function to get translated videos
-    final response = await SupabaseService().client
-        .rpc(
-          'get_translated_videos',
-          params: {
-            'target_language': _currentLanguage,
-            'limit_count': 50,
-          },
-        )
-        .select();
+//   try {
+//     // Use the PostgreSQL function to get translated videos
+//     final response = await SupabaseService().client
+//         .rpc(
+//           'get_translated_videos',
+//           params: {
+//             'target_language': _currentLanguage,
+//             'limit_count': 50,
+//           },
+//         )
+//         .select();
 
-    print('🎬 [Video Debug] Raw response for language $_currentLanguage:');
-    for (var video in response) {
-      print('🎬 Video: ${video['title']} -> ${video['translated_title']}');
-      print('🎬 Source: ${video['source_name']} -> ${video['translated_source_name']}');
-      print('🎬 Platform: ${video['platform_name']} -> ${video['translated_platform_name']}');
-      print('---');
+//     print('🎬 [Video Debug] Raw response for language $_currentLanguage:');
+//     for (var video in response) {
+//       print('🎬 Video: ${video['title']} -> ${video['translated_title']}');
+//       print('🎬 Source: ${video['source_name']} -> ${video['translated_source_name']}');
+//       print('🎬 Platform: ${video['platform_name']} -> ${video['translated_platform_name']}');
+//       print('---');
+//     }
+
+//     _videos = response.map<VideoArticle>((videoData) {
+//       return VideoArticle.fromJson(videoData);
+//     }).toList();
+    
+//     print('🟢 [NewsProvider] Loaded ${_videos.length} translated videos for language: $_currentLanguage');
+//   } catch (e) {
+//     _videosError = 'Failed to load videos: $e';
+//     print('❌ Error loading videos: $e');
+    
+//     // Fallback code remains the same...
+//   } finally {
+//     _isLoadingVideos = false;
+//     notifyListeners();
+//   }
+// }
+
+  // Future<void> refreshVideos() async {
+  //   _videos.clear();
+  //   await loadVideos();
+  // }
+
+  // // Check if we have videos data
+  // bool get hasVideos => _videos.isNotEmpty;
+
+
+Future<void> _loadReadNewsFromSharedPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _readNewsIds = prefs.getStringList(_readNewsKey) ?? [];
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) print('Error loading read news: $e');
     }
-
-    _videos = response.map<VideoArticle>((videoData) {
-      return VideoArticle.fromJson(videoData);
-    }).toList();
-    
-    print('🟢 [NewsProvider] Loaded ${_videos.length} translated videos for language: $_currentLanguage');
-  } catch (e) {
-    _videosError = 'Failed to load videos: $e';
-    print('❌ Error loading videos: $e');
-    
-    // Fallback code remains the same...
-  } finally {
-    _isLoadingVideos = false;
-    notifyListeners();
-  }
-}
-
-  Future<void> refreshVideos() async {
-    _videos.clear();
-    await loadVideos();
   }
 
-  // Check if we have videos data
-  bool get hasVideos => _videos.isNotEmpty;
+  Future<void> _saveReadNewsToSharedPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_readNewsKey, _readNewsIds);
+    } catch (e) {
+      if (kDebugMode) print('Error saving read news: $e');
+    }
+  }
 
+  void markAsRead(News news) {
+    if (!_readNewsIds.contains(news.id)) {
+      _readNewsIds.add(news.id);
+      _saveReadNewsToSharedPreferences();
+      
+      // If we're currently in Unread category, update the filtered list
+      if (_selectedCategory == 'Unread') {
+        _filterNewsByCategory('Unread');
+      }
+      notifyListeners();
+    }
+  }
 
+  void markAsUnread(News news) {
+    if (_readNewsIds.contains(news.id)) {
+      _readNewsIds.remove(news.id);
+      _saveReadNewsToSharedPreferences();
+      notifyListeners();
+    }
+  }
 
+  bool isRead(News news) {
+    return _readNewsIds.contains(news.id);
+  }
 
 
   Future<void> fetchHeadlines() async {
@@ -226,6 +271,7 @@ Future<void> loadVideos() async {
 
   Future<void> _initializeApp() async {
     await _loadBookmarksFromSharedPreferences();
+     await _loadReadNewsFromSharedPreferences(); 
     await _loadDynamicCategories();
     await _initializeLanguage();
   }
@@ -243,7 +289,7 @@ Future<void> loadVideos() async {
     await _saveCurrentLanguage();
     await loadNews();
     await fetchTopics();
-     await loadVideos();
+    //  await loadVideos();
     notifyListeners();
   }
 
@@ -270,6 +316,7 @@ Future<void> loadVideos() async {
     try {
       setState(() {
         _isLoading = true;
+        // _isRefreshing = true; 
         _hasError = false;
       });
       String? rpcCategoryFilter;
@@ -288,10 +335,12 @@ Future<void> loadVideos() async {
       _filterNewsByCategory(_selectedCategory);
       setState(() {
         _isLoading = false;
+        //  _isRefreshing = false; 
       });
     } catch (e) {
       setState(() {
         _isLoading = false;
+        // _isRefreshing = false;
         _hasError = true;
       });
     }
@@ -540,7 +589,8 @@ Future<void> loadVideos() async {
         '🟢 [NewsProvider] Exact Finance filter found ${_filteredNews.length} articles',
       );
     } else if (category == 'Unread') {
-      _filteredNews = List.from(_allNews);
+      // FIXED: Only show unread articles
+      _filteredNews = _allNews.where((news) => !_readNewsIds.contains(news.id)).toList();
     } else {
       final dbCategory = _mapCategoryToDbFormat(category);
       _filteredNews = _allNews.where((news) {
@@ -566,8 +616,8 @@ Future<void> loadVideos() async {
         return 'Good_News';
       case 'top stories':
         return 'Top_Stories';
-      case 'videos':
-        return 'Videos';
+      // case 'videos':
+      //   return 'Videos';
       case 'timeline':
         return 'Timeline';
       default:
@@ -577,6 +627,7 @@ Future<void> loadVideos() async {
 
 Future<int> silentRefresh() async {
   try {
+    //  _isRefreshing = true;
     print('🟢 [NewsProvider] Performing silent refresh...');
     
     String? rpcCategoryFilter;
@@ -606,13 +657,16 @@ Future<int> silentRefresh() async {
       
       // Only notify if there are actual changes
       notifyListeners();
+      //  _isRefreshing = false;
       return actuallyNewNews.length;
     } else {
       print('🟢 [NewsProvider] No new articles found');
+      // _isRefreshing = false;
       return 0;
     }
   } catch (e) {
     print('🔴 [NewsProvider] Error in silent refresh: $e');
+    //  _isRefreshing = false; 
     return 0;
   }
 }
@@ -621,6 +675,7 @@ Future<void> refreshNews() async {
   try {
     setState(() {
       _isLoading = true;
+      // _isRefreshing = true;
       _hasError = false;
     });
     
@@ -628,10 +683,13 @@ Future<void> refreshNews() async {
     
     setState(() {
       _isLoading = false;
+      //  _isRefreshing = false;
+       
     });
   } catch (e) {
     setState(() {
       _isLoading = false;
+      //  _isRefreshing = false;
       _hasError = true;
     });
   }

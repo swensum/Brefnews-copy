@@ -4,12 +4,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:marvelous_carousel/marvelous_carousel.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import '../language/app_localizations.dart';
 import '../provider/news_provider.dart';
 import '../models/news_model.dart';
+import '../repositories/marvelous_carousel.dart';
 import '../utilities/share_utils.dart';
+import '../utilities/webview_screen.dart';
 
 
 class BookmarkPage extends StatefulWidget {
@@ -129,11 +130,9 @@ class _BookmarkPageState extends State<BookmarkPage> with TickerProviderStateMix
         if (_sortedBookmarks.length == 1) return _buildSingleBookmark(newsProvider, _sortedBookmarks.first);
 
         return MarvelousCarousel(
-          pagerType: PagerType.stack,
-          margin: 8,
-          scrollDirection: Axis.vertical,
-          reverse: true,
-          dotsVisible: false,
+      
+          margin: 1,
+          
           onPageChanged: (index) {
             if (mounted) {
               setState(() {
@@ -268,103 +267,104 @@ class _AnimatedShareIconState extends State<_AnimatedShareIcon> {
     );
   }
 }
-class _BookmarkNewsCard extends StatelessWidget {
+
+class _BookmarkNewsCard extends StatefulWidget {
   final News news;
   final bool isActive;
   final bool isClickedNews;
-   final GlobalKey shareKey = GlobalKey();
 
- _BookmarkNewsCard({
+  const _BookmarkNewsCard({
     required this.news, 
     required this.isActive,
     required this.isClickedNews,
   });
- Future<void> _shareNewsCard(BuildContext context) async {
+
+  @override
+  State<_BookmarkNewsCard> createState() => _BookmarkNewsCardState();
+}
+
+class _BookmarkNewsCardState extends State<_BookmarkNewsCard> {
+  final GlobalKey shareKey = GlobalKey();
+  bool _isBookmarkOrShareTap = false;
+
+  Future<void> _shareNewsCard(BuildContext context) async {
+    // Set flag to prevent card tap
+    _isBookmarkOrShareTap = true;
+    
     await ShareUtils.shareNewsCard(
       globalKey: shareKey,
-      news: news,
+      news: widget.news,
       context: context,
     );
-  }
-  Future<void> _launchUrl(BuildContext context) async {
-  String rawUrl = news.sourceUrl.trim();
-  
-  if (rawUrl.isEmpty) {
-    _showErrorSnackBar(context, "Invalid URL");
-    return;
-  }
-
-  // Ensure URL has proper scheme
-  if (!rawUrl.startsWith("http")) {
-    rawUrl = "https://$rawUrl";
-  }
-
-  final Uri url = Uri.parse(rawUrl);
-
-  try {
-    // For iOS, use external launch for better compatibility
-    if (Theme.of(context).platform == TargetPlatform.iOS) {
-      bool launched = await launchUrl(
-        url,
-        mode: LaunchMode.externalApplication,
-      );
-      
-      if (!launched && context.mounted) {
-        _showErrorSnackBar(context, "Could not launch URL");
-      }
-    } else {
-      // For Android, use platform default
-      bool launched = await launchUrl(
-        url,
-        mode: LaunchMode.platformDefault,
-      );
-      
-      if (!launched && context.mounted) {
-        _showErrorSnackBar(context, "Could not launch URL");
-      }
-    }
-  } catch (e) {
-    if (context.mounted) {
-      _showErrorSnackBar(context, "Error: ${e.toString()}");
-      
-      // Fallback: Try to open in Safari directly on iOS
-      if (Theme.of(context).platform == TargetPlatform.iOS) {
-        try {
-          await launchUrl(
-            Uri.parse('x-web-search://?$rawUrl'),
-            mode: LaunchMode.externalApplication,
-          );
-        } catch (fallbackError) {
-             if(!context.mounted) return;
-          _showErrorSnackBar(context, "Please check your URL format");
-        }
-      }
-    }
-  }
-}
-  void _showErrorSnackBar(BuildContext context, String message) {
-    final screenWidth = MediaQuery.of(context).size.width;
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: TextStyle(fontSize: screenWidth * 0.035),
+    // Reset flag after a short delay
+    Future.delayed(Duration(milliseconds: 100), () {
+      _isBookmarkOrShareTap = false;
+    });
+  }
+
+  Future<void> _launchUrl(BuildContext context) async {
+    // Don't launch if it was a bookmark/share tap
+    if (_isBookmarkOrShareTap) {
+      _isBookmarkOrShareTap = false;
+      return;
+    }
+    
+    String rawUrl = widget.news.sourceUrl.trim();
+    
+    print('🟢 [WebView Debug] Original URL: $rawUrl');
+    
+    if (rawUrl.isEmpty) {
+      return;
+    }
+
+    // Force HTTPS
+    rawUrl = rawUrl.replaceAll(RegExp(r'^https?://'), '');
+    rawUrl = 'https://$rawUrl';
+    
+    print('🟢 [WebView Debug] Secure URL: $rawUrl');
+
+    try {
+      if (!context.mounted) return;
+      
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => WebViewScreen(
+            url: rawUrl,
+            title: widget.news.source.isEmpty ? 'News Article' : widget.news.source,
+          ),
         ),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
+      
+    } catch (e) {
+      print('🔴 [WebView Debug] WebView failed: $e');
+    }
+  }
+
+  void _toggleBookmark(BuildContext context) {
+    // Set flag to prevent card tap
+    _isBookmarkOrShareTap = true;
+    
+    final newsProvider = Provider.of<NewsProvider>(context, listen: false);
+    bool isBookmarked = newsProvider.isBookmarked(widget.news);
+    
+    newsProvider.toggleBookmark(widget.news);
+    _showBookmarkDialog(context, !isBookmarked);
+    
+    // Reset flag after a short delay
+    Future.delayed(Duration(milliseconds: 100), () {
+      _isBookmarkOrShareTap = false;
+    });
   }
 
   void _showImagePreview(BuildContext context) {
-    if (news.imageUrl == null || news.imageUrl!.isEmpty) return;
+    if (widget.news.imageUrl == null || widget.news.imageUrl!.isEmpty) return;
     
     showDialog(
       context: context,
       barrierColor: Colors.black87,
       builder: (BuildContext context) {
-        return _ImagePreviewDialog(news: news);
+        return _ImagePreviewDialog(news: widget.news);
       },
     );
   }
@@ -373,7 +373,8 @@ class _BookmarkNewsCard extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final overlayState = Overlay.of(context);
-final localizations = AppLocalizations.of(context)!;
+    final localizations = AppLocalizations.of(context)!;
+    
     final overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
         bottom: screenHeight * 0.1,
@@ -422,253 +423,271 @@ final localizations = AppLocalizations.of(context)!;
 
   // ADD THREE-DOT MENU BUILDER
   Widget _buildThreeDotMenu(BuildContext context) {
-  final screenWidth = MediaQuery.of(context).size.width;
-  final localizations = AppLocalizations.of(context)!;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final localizations = AppLocalizations.of(context)!;
 
-  return Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(16),
-        topRight: Radius.circular(16),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
+        ),
       ),
-    ),
-    child: SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Share Feedback on Short Option
-          ListTile(
-            leading: Icon(Icons.feedback, color: Colors.black87),
-            title: Text(
-              localizations.shareFeedbackOnShort,
-              style: TextStyle(
-                color: Colors.black,
-                fontSize: screenWidth * 0.04,
-                fontWeight: FontWeight.w500,
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Share Feedback on Short Option
+            ListTile(
+              leading: Icon(Icons.feedback, color: Colors.black87),
+              title: Text(
+                localizations.shareFeedbackOnShort,
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: screenWidth * 0.04,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
+              onTap: () {
+                Navigator.pop(context);
+                _shareFeedbackOnShort(context);
+              },
             ),
-            onTap: () {
-              Navigator.pop(context);
-              _shareFeedbackOnShort(context);
-            },
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}// ADD FEEDBACK METHOD
+    );
+  }
+
+  // ADD FEEDBACK METHOD
   void _shareFeedbackOnShort(BuildContext context) {
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    // Then navigate to feedback page
-    context.push('/feedback-detail', extra: {
-      'newsHeadline': news.title,
-      'onFeedbackSubmitted': (String type, String text, String headline) {
-        // Handle feedback submission callback if needed
-        print('Feedback submitted: $type - $text');
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Then navigate to feedback page
+      context.push('/feedback-detail', extra: {
+        'newsHeadline': widget.news.title,
+        'onFeedbackSubmitted': (String type, String text, String headline) {
+          // Handle feedback submission callback if needed
+          print('Feedback submitted: $type - $text');
+        }
+      });
     });
-  });
-}
+  }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final maxImageHeight = screenHeight * 0.35;
+    final maxImageHeight = screenHeight * 0.33;
 
     return RepaintBoundary(
       key: shareKey,
       child: Padding(
         padding: EdgeInsets.all(screenWidth * 0.001),
-        child: Material(
-           color: Colors.transparent,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 8,
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    if (news.imageUrl != null && news.imageUrl!.isNotEmpty)
-                      _buildNewsImage(context, maxImageHeight)
-                    else
-                      _buildPlaceholderImage(maxImageHeight, screenWidth),
-      
-                    // ADD THREE DOTS MENU BUTTON - Top Right Corner
-                    Positioned(
-                      top: screenWidth * 0.02,
-                      right: screenWidth * 0.02,
-                      child: GestureDetector(
-                        onTap: () => _showThreeDotMenu(context),
-                        child: Container(
-                          width: screenWidth * 0.08,
-                          height: screenWidth * 0.08,
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha:  0.6),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: screenWidth * 0.008,
-                                height: screenWidth * 0.008,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              SizedBox(width: screenWidth * 0.005),
-                              Container(
-                                width: screenWidth * 0.008,
-                                height: screenWidth * 0.008,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              SizedBox(width: screenWidth * 0.005),
-                              Container(
-                                width: screenWidth * 0.008,
-                                height: screenWidth * 0.008,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-      
-                    // Logo - Same as NotificationPage
-                    Positioned(
-                      bottom: -screenWidth * 0.039,
-                      left: screenWidth * 0.01,
-                      child: Container(
-                        padding: EdgeInsets.zero,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.asset(
-                            'assets/brefnews.png',
-                               color: Theme.of(context).colorScheme.onSurface,
-                            width: screenWidth * 0.25,
+         child: GestureDetector(
+           onTap: () => _launchUrl(context),
+          child: Material(
+             color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 8,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (widget.news.imageUrl != null && widget.news.imageUrl!.isNotEmpty)
+                        _buildNewsImage(context, maxImageHeight)
+                      else
+                        _buildPlaceholderImage(maxImageHeight, screenWidth),
+                
+                      // ADD THREE DOTS MENU BUTTON - Top Right Corner
+                      Positioned(
+                        top: screenWidth * 0.02,
+                        right: screenWidth * 0.02,
+                        child: GestureDetector(
+                          onTap: () => _showThreeDotMenu(context),
+                          child: Container(
+                            width: screenWidth * 0.08,
                             height: screenWidth * 0.08,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    ),
-      
-                    // Action Buttons - Same as NotificationPage
-                    Positioned(
-                      bottom: -screenWidth * 0.03,
-                      right: 0,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: screenWidth * 0.02,
-                          vertical: screenWidth * 0.01,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Consumer<NewsProvider>(
-                              builder: (context, newsProvider, child) {
-                                bool isBookmarked = newsProvider.isBookmarked(news);
-                                return GestureDetector(
-                                  onTap: () {
-                                    newsProvider.toggleBookmark(news);
-                                    _showBookmarkDialog(context, !isBookmarked);
-                                  },
-                                  child: Icon(
-                                    isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                                    size: screenWidth * 0.052,
-                                    color: isBookmarked ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(context).colorScheme.onSecondaryFixed,
-                                  ),
-                                );
-                              },
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha:  0.6),
+                              shape: BoxShape.circle,
                             ),
-                            SizedBox(width: screenWidth * 0.02),
-                            _AnimatedShareIcon(
-                                onTap: () => _shareNewsCard(context),
-                                size: screenWidth * 0.05,
-                              ),
-                          ],
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: screenWidth * 0.008,
+                                  height: screenWidth * 0.008,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                SizedBox(width: screenWidth * 0.005),
+                                Container(
+                                  width: screenWidth * 0.008,
+                                  height: screenWidth * 0.008,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                SizedBox(width: screenWidth * 0.005),
+                                Container(
+                                  width: screenWidth * 0.008,
+                                  height: screenWidth * 0.008,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-      
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      screenWidth * 0.04,
-                      screenHeight * 0.02,
-                      screenWidth * 0.04,
-                      screenHeight * 0.015,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Title
-                        Text(
-                          news.title,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface,
-                            fontSize: Platform.isIOS
-                                ? screenWidth * 0.045
-                                : screenWidth * 0.043,
-                            fontWeight: FontWeight.bold,
-                            height: Platform.isIOS ? 1.4 : 1.3,
+                
+                      // Logo - Same as NotificationPage
+                      Positioned(
+                        bottom: -screenWidth * 0.039,
+                        left: screenWidth * 0.01,
+                        child: GestureDetector(
+                          onTap: () {
+                            // Prevent URL launch when logo is tapped
+                            _isBookmarkOrShareTap = true;
+                            Future.delayed(Duration(milliseconds: 100), () {
+                              _isBookmarkOrShareTap = false;
+                            });
+                          },
+                          child: Container(
+                            padding: EdgeInsets.zero,
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.asset(
+                                'assets/brefnews.png',
+                                color: Theme.of(context).colorScheme.onSurface,
+                                width: screenWidth * 0.25,
+                                height: screenWidth * 0.08,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
                           ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        SizedBox(height: screenHeight * 0.01),
-                        Flexible(
-                          fit: FlexFit.loose,
-                          child: SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(),
+                      ),
+                
+                      
+                      Positioned(
+                        bottom: -screenWidth * 0.047,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: () {
+                            // Prevent URL launch when the entire icon container is tapped
+                            _isBookmarkOrShareTap = true;
+                            Future.delayed(Duration(milliseconds: 100), () {
+                              _isBookmarkOrShareTap = false;
+                            });
+                          },
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: screenWidth * 0.02,
+                              vertical: screenWidth * 0.01,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Consumer<NewsProvider>(
+                                  builder: (context, newsProvider, child) {
+                                    bool isBookmarked = newsProvider.isBookmarked(widget.news);
+                                    return GestureDetector(
+                                      onTap: () => _toggleBookmark(context),
+                                      child: Icon(
+                                        isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                                        size: screenWidth * 0.05,
+                                        color: isBookmarked ? Theme.of(context).colorScheme.primary
+                                            : Theme.of(context).colorScheme.onSecondaryFixed,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                SizedBox(width: screenWidth * 0.02),
+                                _AnimatedShareIcon(
+                                  onTap: () => _shareNewsCard(context),
+                                  size: screenWidth * 0.05,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        screenWidth * 0.04,
+                        screenHeight * 0.02,
+                        screenWidth * 0.04,
+                        screenHeight * 0.015,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Title
+                          Text(
+                            widget.news.title,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontSize: Platform.isIOS
+                                  ? screenWidth * 0.042
+                                  : screenWidth * 0.042,
+                              fontWeight: FontWeight.bold,
+                              height: Platform.isIOS ? 1.3 : 1.3,
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: screenHeight * 0.01),
+                          Flexible(
+                            fit: FlexFit.loose,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 // Summary Text
                                 Text(
-                                  news.summary,
+                                  widget.news.summary,
                                   style: TextStyle(
+                                      fontWeight: FontWeight.w600,
                                     color: Theme.of(
                                       context,
                                     ).textTheme.titleMedium?.color,
                                     fontSize: Platform.isIOS
-                                        ? screenWidth * 0.038
+                                        ? screenWidth * 0.035
                                         : screenWidth * 0.035,
                                     height: Platform.isIOS ? 1.6 : 1.4,
                                   ),
                                 ),
-                                SizedBox(height: screenHeight * 0.015),
-
+                                SizedBox(height: screenHeight * 0),
+                                      
                                 // Source and Time Info
                                 Container(
                                   padding: EdgeInsets.symmetric(
@@ -680,23 +699,23 @@ final localizations = AppLocalizations.of(context)!;
                                       // Source
                                       Flexible(
                                         child: Text(
-                                          news.source,
+                                          widget.news.source,
                                           style: TextStyle(
                                             color: Theme.of(
                                               context,
                                             ).colorScheme.outlineVariant,
                                             fontSize: Platform.isIOS
-                                                ? screenWidth * 0.034
-                                                : screenWidth * 0.032,
-                                            fontWeight: FontWeight.w500,
+                                                ? screenWidth * 0.03
+                                                : screenWidth * 0.03,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                           maxLines: 1,
                                         ),
                                       ),
-
+                                      
                                       SizedBox(width: screenWidth * 0.02),
-
+                                      
                                       // Dot separator
                                       Container(
                                         width: screenWidth * 0.01,
@@ -709,16 +728,17 @@ final localizations = AppLocalizations.of(context)!;
                                         ),
                                       ),
                                       SizedBox(width: screenWidth * 0.02),
-
+                                      
                                       Text(
-                                        news.timeAgo,
+                                        widget.news.timeAgo,
                                         style: TextStyle(
+                                           fontWeight: FontWeight.w600,
                                           color: Theme.of(
                                             context,
                                           ).colorScheme.outlineVariant,
                                           fontSize: Platform.isIOS
-                                              ? screenWidth * 0.034
-                                              : screenWidth * 0.032,
+                                              ? screenWidth * 0.03
+                                              : screenWidth * 0.03,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,
@@ -729,98 +749,98 @@ final localizations = AppLocalizations.of(context)!;
                               ],
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                // Headline section - takes full width (Same as NotificationPage)
-                GestureDetector(
-                  onTap: () => _launchUrl(context),
-                  child: Container(
-                    width: double.infinity,
-                    height: screenHeight * 0.07,
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
+                  // Headline section - takes full width (Same as NotificationPage)
+                  GestureDetector(
+                    onTap: () => _launchUrl(context),
+                    child: Container(
+                      width: double.infinity,
+                      height: screenHeight * 0.07,
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                        image: widget.news.imageUrl != null && widget.news.imageUrl!.isNotEmpty
+                            ? DecorationImage(
+                                image: NetworkImage(widget.news.imageUrl!),
+                                fit: BoxFit.cover,
+                                colorFilter: ColorFilter.mode(
+                                  Colors.black.withValues(alpha: 0.6),
+                                  BlendMode.darken,
+                                ),
+                              )
+                            : null,
+                        color: widget.news.imageUrl == null || widget.news.imageUrl!.isEmpty
+                            ? Colors.grey[800]
+                            : null,
                       ),
-                      image: news.imageUrl != null && news.imageUrl!.isNotEmpty
-                          ? DecorationImage(
-                              image: NetworkImage(news.imageUrl!),
-                              fit: BoxFit.cover,
-                              colorFilter: ColorFilter.mode(
-                                Colors.black.withValues(alpha: 0.6),
-                                BlendMode.darken,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                          child: Container(
+                            padding: EdgeInsets.only(left: screenWidth * 0.04),
+                            decoration: BoxDecoration(
+                              borderRadius: const BorderRadius.only(
+                                bottomLeft: Radius.circular(16),
+                                bottomRight: Radius.circular(16),
                               ),
-                            )
-                          : null,
-                      color: news.imageUrl == null || news.imageUrl!.isEmpty
-                          ? Colors.grey[800]
-                          : null,
-                    ),
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
-                      ),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-                        child: Container(
-                          padding: EdgeInsets.only(left: screenWidth * 0.04),
-                          decoration: BoxDecoration(
-                            borderRadius: const BorderRadius.only(
-                              bottomLeft: Radius.circular(16),
-                              bottomRight: Radius.circular(16),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.0),
+                                  Colors.black.withValues(alpha: 0.35),
+                                ],
+                              ),
                             ),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.0),
-                                Colors.black.withValues(alpha: 0.35),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (widget.news.headline != null &&
+                                    widget.news.headline!['headline'] != null)
+                                  Text(
+                                    widget.news.headline!['headline'],
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      fontSize: Platform.isIOS
+                                          ? screenWidth * 0.039
+                                          : screenWidth * 0.037,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    textAlign: TextAlign.left,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                if (widget.news.headline != null &&
+                                    widget.news.headline!['subheadline'] != null)
+                                  Text(
+                                    widget.news.headline!['subheadline'],
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      fontSize: Platform.isIOS
+                                          ? screenWidth * 0.032
+                                          : screenWidth * 0.03,
+                                    ),
+                                    textAlign: TextAlign.left,
+                                  ),
                               ],
                             ),
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (news.headline != null &&
-                                  news.headline!['headline'] != null)
-                                Text(
-                                  news.headline!['headline'],
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.9),
-                                    fontSize: Platform.isIOS
-                                        ? screenWidth * 0.039
-                                        : screenWidth * 0.037,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  textAlign: TextAlign.left,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              if (news.headline != null &&
-                                  news.headline!['subheadline'] != null)
-                                Text(
-                                  news.headline!['subheadline'],
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.9),
-                                    fontSize: Platform.isIOS
-                                        ? screenWidth * 0.032
-                                        : screenWidth * 0.03,
-                                  ),
-                                  textAlign: TextAlign.left,
-                                ),
-                            ],
-                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -839,7 +859,7 @@ final localizations = AppLocalizations.of(context)!;
           height: maxImageHeight,
           width: double.infinity,
           child: Image.network(
-            news.imageUrl!,
+            widget.news.imageUrl!,
             width: double.infinity,
             height: maxImageHeight,
             fit: BoxFit.cover,

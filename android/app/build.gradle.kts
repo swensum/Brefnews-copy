@@ -14,19 +14,19 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services") 
 }
-
+//
 android {
     namespace = "com.nandak.brefnews"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8  
-        targetCompatibility = JavaVersion.VERSION_1_8  
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
-
     kotlinOptions {
-        jvmTarget = "1.8"  
+        // Kotlin jvmTarget as a string. Depending on Kotlin version this may need to be adjusted.
+        jvmTarget = "21"
     }
 signingConfigs {
         create("release") {
@@ -40,7 +40,6 @@ signingConfigs {
     }
     defaultConfig {
         applicationId = "com.nandak.brefnews"
-      
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -48,14 +47,12 @@ signingConfigs {
         multiDexEnabled = true
     }
 
-
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+              signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
-        
     }
 }
 
