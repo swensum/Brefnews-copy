@@ -14,7 +14,7 @@ import '../component/signin.dart';
 import '../component/topics_detail_page.dart';
 import '../landingpage.dart';
 import '../models/news_model.dart';
-import '../onboarding/onboardinglanguage.dart';
+
 import '../options/contact.dart';
 import '../options/language.dart';
 import '../options/preference.dart';
@@ -56,10 +56,10 @@ class AppRouter {
           );
         },
       ),
-      GoRoute(
-      path: '/onboarding-language',
-      builder: (context, state) => const OnboardingLanguagePage(),
-    ),
+    //   GoRoute(
+    //   path: '/onboarding-language',
+    //   builder: (context, state) => const OnboardingLanguagePage(),
+    // ),
       ShellRoute(
         builder: (context, state, child) {
           return LandingPageWrapper(child: child);

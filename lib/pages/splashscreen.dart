@@ -51,8 +51,15 @@ class _SplashScreenState extends State<SplashScreen> {
       if (!mounted) return;
       context.go('/home');
     } else {
+      // Option 1: Navigate to home anyway (skip onboarding)
+      await _requestNotificationPermission();
       if (!mounted) return;
-      context.go('/onboarding-language');
+      context.go('/home');
+      
+      // Option 2: If you want to show something else, uncomment one of these:
+      // context.go('/some-other-screen');
+      // OR
+      // Show an error or stay on splash (not recommended)
     }
   }
 

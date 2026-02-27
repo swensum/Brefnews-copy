@@ -51,8 +51,7 @@ class MyApp extends StatelessWidget {
             key: Key('app_${languageProvider.currentLanguage}'), 
             routerConfig: AppRouter.router,
             title: 'Bref News',
-            
-            // Localization setup
+           
             locale: languageProvider.currentLocale,
             supportedLocales: const [
               Locale('en'), // English
