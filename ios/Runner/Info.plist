@@ -18,6 +18,10 @@
 	<string>brefnews</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>com.apple.developer.applesignin</key>
+<array>
+    <string>Default</string>
+</array>
 	<key>NSAppTransportSecurity</key>
 <dict>
     <key>NSAllowsArbitraryLoads</key>
@@ -35,6 +39,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>com.googleusercontent.apps.1016671928495-hvm538ksqe6cb9vdvk6mkd4qas0do9ur</string>
+				   <string>com.nandak.brefnews</string>
 			</array>
 		</dict>
 	</array>

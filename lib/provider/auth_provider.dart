@@ -63,7 +63,32 @@ class AuthProvider with ChangeNotifier {
       return false;
     }
   }
-
+  Future<bool> deleteAccount() async {
+  try {
+    final success = await AuthService.deleteAccount();
+    if (success) {
+      // Clear local user data
+      _clearUserData();
+      notifyListeners();
+    }
+    return success;
+  } catch (e) {
+    print('Error in deleteAccount: $e');
+    return false;
+  }
+}
+Future<bool> signInWithApple(BuildContext context) async {
+  try {
+    final success = await AuthService.signInWithApple(context);
+    if (success) {
+      await checkAuthStatus();
+    }
+    return success;
+  } catch (e) {
+    print('Error in signInWithApple: $e');
+    return false;
+  }
+}
 
   // Email sign-in methods
   Future<void> signInWithEmail({

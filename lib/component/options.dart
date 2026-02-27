@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -6,7 +7,6 @@ import '../provider/auth_provider.dart';
 import '../provider/themeprovider.dart';
 import '../provider/language_provider.dart';
 import '../provider/news_provider.dart';
-
 class OptionsPage extends StatefulWidget {
   const OptionsPage({super.key});
 
@@ -279,6 +279,199 @@ class _OptionsPageState extends State<OptionsPage> {
     );
   }
 
+  void _handleDeleteAccount() {
+  
+  // Show confirmation dialog
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      title: Text(
+        'Delete Account',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.error,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      content: Text(
+        'Are you sure you want to delete your account? This action cannot be undone. All your data will be permanently deleted.',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            'Cancel',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context); // Close confirmation dialog
+            _performAccountDeletion();
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+          child: Text(
+            'Delete',
+            style: TextStyle(
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _performAccountDeletion() async {
+  
+  // Show loading dialog
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: Container(
+        padding: EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Deleting your account...',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  try {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final success = await authProvider.deleteAccount();
+
+    if (context.mounted) {
+      Navigator.pop(context); // Close loading dialog
+      
+      if (success) {
+        // Update local state
+        setState(() {
+          _isSignedIn = false;
+          _signedInMethod = '';
+          _userName = null;
+          _userEmail = null;
+          _userPhotoUrl = null;
+        });
+
+        // Show success message
+        _showDeleteSuccessDialog();
+      } else {
+        // Show error message
+        _showDeleteErrorDialog();
+      }
+    }
+  } catch (e) {
+    if (context.mounted) {
+      Navigator.pop(context); // Close loading dialog
+      _showDeleteErrorDialog();
+    }
+  }
+}
+
+void _showDeleteSuccessDialog() {
+  final screenWidth = MediaQuery.of(context).size.width;
+  final screenHeight = MediaQuery.of(context).size.height;
+  final overlayState = Overlay.of(context);
+
+  final overlayEntry = OverlayEntry(
+    builder: (context) => Positioned(
+      bottom: screenHeight * 0.18,
+      left: screenWidth * 0.3,
+      right: screenWidth * 0.3,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: screenWidth * 0.002,
+            vertical: screenWidth * 0.02,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.green.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            'Account deleted successfully!',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: screenWidth * 0.038,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    ),
+  );
+
+  overlayState.insert(overlayEntry);
+
+  Future.delayed(Duration(seconds: 3), () {
+    overlayEntry.remove();
+  });
+}
+
+void _showDeleteErrorDialog() {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(
+        'Deletion Failed',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.error,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      content: Text(
+        'Failed to delete your account. Please try again later or contact support.',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            'OK',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -293,130 +486,162 @@ class _OptionsPageState extends State<OptionsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: Theme.of(context).colorScheme.onSurface,
-            size: screenWidth * 0.06,
-          ),
-          onPressed: () => Navigator.of(context).pop(),
+  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+  elevation: 0,
+  leading: IconButton(
+    icon: Icon(
+      Icons.arrow_back,
+      color: Theme.of(context).colorScheme.onSurface,
+      size: screenWidth > 600 ? 38 : screenWidth * 0.06, // Fixed size for iPad
+    ),
+    onPressed: () => Navigator.of(context).pop(),
+  ),
+  title: Container(
+    constraints: BoxConstraints(
+      maxWidth: MediaQuery.of(context).size.width > 600 
+          ? MediaQuery.of(context).size.width * 0.7 // 70% width on iPad
+          : double.infinity, 
+    ),
+    child: Text(
+      localizations.options,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurface,
+        fontWeight: FontWeight.bold,
+        fontSize: screenWidth > 600 ? 28 : screenWidth * 0.045, // Fixed font size for iPad
+      ),
+      overflow: TextOverflow.ellipsis,
+      maxLines: 1,
+    ),
+  ),
+  centerTitle: false,
+  actions: [
+    if (_isSignedIn)
+      Padding(
+        padding: EdgeInsets.only(
+          right: screenWidth > 600 ? 16 : screenWidth * 0.04,
         ),
-        title: Text(
-          localizations.options,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
-            fontWeight: FontWeight.bold,
-            fontSize: screenWidth * 0.045,
-          ),
-        ),
-        centerTitle: false,
-        actions: [
-          if (_isSignedIn)
-            Padding(
-              padding: EdgeInsets.only(right: screenWidth * 0.04),
-              child: PopupMenuButton<String>(
-                icon: CircleAvatar(
-                  radius: screenWidth * 0.04,
-                  backgroundColor: Colors.blue[100],
-                  child: _userPhotoUrl != null
-                      ? CircleAvatar(
-                          radius: screenWidth * 0.04,
-                          backgroundImage: NetworkImage(_userPhotoUrl!),
-                        )
-                      : Stack(
-                          children: [
-                            Icon(
-                              Icons.person,
-                              color: Theme.of(context).colorScheme.primary,
-                              size: screenWidth * 0.05,
-                            ),
-                            Positioned(
-                              right: 0,
-                              bottom: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onPrimary,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: _getAuthMethodIcon(),
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-                onSelected: (value) {
-                  if (value == 'logout') {
-                    _handleLogout();
-                  }
-                },
-                itemBuilder: (BuildContext context) => [
-                  if (_userName != null)
-                    PopupMenuItem<String>(
-                      value: 'profile',
-                      enabled: false,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.onPrimary,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _userName!,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: screenWidth * 0.04,
-                                color: Colors.black, // Black text color
-                              ),
-                            ),
-                            if (_userEmail != null)
-                              Text(
-                                _userEmail!,
-                                style: TextStyle(
-                                  fontSize: screenWidth * 0.035,
-                                  color: Colors
-                                      .grey[800], // Darker grey for better contrast
-                                ),
-                              ),
-                          ],
-                        ),
+        child: PopupMenuButton<String>(
+          icon: CircleAvatar(
+            radius: screenWidth > 600 ? 20 : screenWidth * 0.04,
+            backgroundColor: Colors.blue[100],
+            child: _userPhotoUrl != null
+                ? CircleAvatar(
+                    radius: screenWidth > 600 ? 20 : screenWidth * 0.04,
+                    backgroundImage: NetworkImage(_userPhotoUrl!),
+                  )
+                : Stack(
+                    children: [
+                      Icon(
+                        Icons.person,
+                        color: Theme.of(context).colorScheme.primary,
+                        size: screenWidth > 600 ? 22 : screenWidth * 0.05,
                       ),
-                    ),
-                  PopupMenuItem<String>(
-                    value: 'logout',
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.onPrimary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.logout, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text(
-                            localizations.logout,
-                            style: TextStyle(color: Colors.black),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onPrimary,
+                            shape: BoxShape.circle,
                           ),
-                        ],
+                          child: _getAuthMethodIcon(),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-                color: Theme.of(context).colorScheme.onPrimary,
+  ),
+  onSelected: (value) {
+    if (value == 'delete') {
+        _handleDeleteAccount();
+    } else if (value == 'logout') {
+      _handleLogout();
+    }
+  },
+  itemBuilder: (BuildContext context) => [
+    if (_userName != null)
+      PopupMenuItem<String>(
+        value: 'profile',
+        enabled: false,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.onPrimary,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _userName!,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: screenWidth * 0.04,
+                  color: Colors.black,
+                ),
               ),
+              if (_userEmail != null)
+                Text(
+                  _userEmail!,
+                  style: TextStyle(
+                    fontSize: screenWidth * 0.035,
+                    color: Colors.grey[800],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    // Add Delete Account option here
+    PopupMenuItem<String>(
+      value: 'delete',
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.onPrimary,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.delete, color: Colors.orange),
+            SizedBox(width: 8),
+            Text(
+              'Delete Account', 
+              style: TextStyle(color: Colors.black),
+            ),
+          ],
+        ),
+      ),
+    ),
+    PopupMenuItem<String>(
+      value: 'logout',
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.onPrimary,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.logout, color: Colors.red),
+            SizedBox(width: 8),
+            Text(
+              localizations.logout,
+              style: TextStyle(color: Colors.black),
+            ),
+          ],
+        ),
+      ),
+    ),
+  ],
+  color: Theme.of(context).colorScheme.onPrimary,
+),
             ),
         ],
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Only show blue container if NOT signed in
+          
             if (!_isSignedIn)
               GestureDetector(
                 onTap: () {
@@ -475,7 +700,7 @@ class _OptionsPageState extends State<OptionsPage> {
                               ),
                             ),
                           ),
-                          SizedBox(width: screenWidth * 0.4),
+                          SizedBox(width: screenWidth * 0.3),
 
                           Row(
                             children: [
@@ -516,6 +741,27 @@ class _OptionsPageState extends State<OptionsPage> {
                                   size: screenWidth * 0.06,
                                 ),
                               ),
+                              SizedBox(width: screenWidth * 0.03),
+
+// Apple Icon - Only show on Apple devices
+if (defaultTargetPlatform == TargetPlatform.iOS || 
+    defaultTargetPlatform == TargetPlatform.macOS)
+  Container(
+    padding: EdgeInsets.all(screenWidth * 0.02),
+    decoration: BoxDecoration(
+      color: Colors.grey[100],
+      shape: BoxShape.circle,
+      border: Border.all(
+        color: Colors.grey[300]!,
+        width: screenWidth * 0.003,
+      ),
+    ),
+    child: Icon(
+      Icons.apple,
+      color: Colors.black,
+      size: screenWidth * 0.06,
+    ),
+  ),
                             ],
                           ),
                         ],

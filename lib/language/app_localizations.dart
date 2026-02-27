@@ -79,6 +79,7 @@ class AppLocalizations {
       'rateThisApp': 'Rate this App',
       'feedback': 'Feedback',
       'privacy': 'Privacy',
+      'signInWithApple': 'Sign in with Apple',
       'googleSignInSuccess': 'Google sign-in successful! Thank You',
       'signInFailed': 'Sign-in failed. Please try again.',
       'signingIn': 'Signing in...',
@@ -86,6 +87,7 @@ class AppLocalizations {
       'changeEmail': 'Change Email',
       'signInWithPhone': 'Sign in with Phone',
       'signInWithEmail': 'Sign in with Email',
+      'signedInWithApple': 'Signed in with Apple!',
       'pleaseEnterEmail': 'Please enter your email',
       'pleaseEnterValidCode': 'Please enter a valid 6-digit code',
       'sendOtp': 'Send OTP',
@@ -199,12 +201,14 @@ class AppLocalizations {
       'signInToSave': 'अपनी पसंद और बुकमार्क सहेजने के लिए\nसाइन इन करें',
       'signIn': 'साइन इन',
       'language': 'भाषा',
+      'signInWithApple': 'एप्पल से साइन इन करें',
       'notifications': 'सूचनाएं',
       'yourPreference': 'आपकी प्राथमिकता',
       'nightMode': 'नाइट मोड',
       'nightModeDescription': 'रात में बेहतर पठनीयता के लिए',
       'shareThisApp': 'इस ऐप को साझा करें',
       'rateThisApp': 'इस ऐप को रेट करें',
+      'signedInWithApple': 'एप्पल से सफलतापूर्वक साइन इन किया गया!',
       'feedback': 'प्रतिक्रिया',
       'privacy': 'गोपनीयता',
       'googleSignInSuccess': 'गूगल साइन-इन सफल! धन्यवाद',
@@ -341,10 +345,12 @@ class AppLocalizations {
       'signInWithGoogle': 'Iniciar sesión con Google',
       'changeEmail': 'Cambiar correo electrónico',
       'signInWithPhone': 'Iniciar sesión con teléfono',
+      'signInWithApple': 'Iniciar sesión con Apple',
       'signInWithEmail': 'Iniciar sesión con correo electrónico',
       'pleaseEnterEmail': 'Por favor ingresa tu correo electrónico',
       'pleaseEnterValidCode': 'Por favor ingresa un código válido de 6 dígitos',
       'sendOtp': 'Enviar OTP',
+       'signedInWithApple': '¡Sesión iniciada con Apple!',
       'verifyCode': 'Verificar código',
       'enter6DigitCode': 'Ingresar código de 6 dígitos',
       'enterYourEmail': 'Ingresa tu correo electrónico',
@@ -447,6 +453,7 @@ class AppLocalizations {
       'signedOutSuccessfully': 'Déconnexion réussie !',
       'google': 'Google',
       'phone': 'Téléphone',
+      'signedInWithApple': 'Connecté avec Apple !',
       'email': 'E-mail',
       'logout': 'Se déconnecter',
       'profile': 'Profil',
@@ -462,6 +469,7 @@ class AppLocalizations {
       'rateThisApp': 'Noter cette application',
       'feedback': 'Retour',
       'privacy': 'Confidentialité',
+       'signInWithApple': 'Se connecter avec Apple',
       'googleSignInSuccess': 'Connexion Google réussie ! Merci',
       'signInFailed': 'Échec de la connexion. Veuillez réessayer.',
       'signingIn': 'Connexion en cours...',
@@ -587,6 +595,7 @@ class AppLocalizations {
       'nightModeDescription': 'رات میں بہتر پڑھنے کے لیے',
       'shareThisApp': 'اس ایپ کو شیئر کریں',
       'rateThisApp': 'اس ایپ کو ریٹ کریں',
+       'signedInWithApple': 'ایپل کے ساتھ کامیابی سے سائن ان ہو گیا!',
       'feedback': 'فیڈ بیک',
       'privacy': 'پرائیویسی',
       'googleSignInSuccess': 'گوگل سائن ان کامیاب! شکریہ',
@@ -602,6 +611,7 @@ class AppLocalizations {
       'verifyCode': 'کوڈ کی تصدیق کریں',
       'enter6DigitCode': '6 ہندسوں کا کوڈ درج کریں',
       'enterYourEmail': 'اپنا ای میل درج کریں',
+      'signInWithApple': 'ایپل کے ساتھ سائن ان کریں',
       'sendVerificationCode': 'تصدیقی کوڈ بھیجیں',
       'enterEmailForCode': 'تصدیقی کوڈ موصول کرنے کے لیے اپنا ای میل پتہ درج کریں',
       'emailSignInSuccess': 'ای میل سائن ان کامیاب!',
@@ -700,6 +710,7 @@ class AppLocalizations {
       'options': '选项',
       'signedOutSuccessfully': '成功退出！',
       'google': '谷歌',
+      'signedInWithApple': '已使用苹果登录！',
       'phone': '电话',
       'email': '电子邮件',
       'logout': '退出登录',
@@ -758,6 +769,7 @@ class AppLocalizations {
     'technicalGlitch': '技术故障',
     'general': '一般',
     'others': '其他',
+     'signInWithApple': '使用苹果登录',
     'selectFeedbackType': '选择反馈类型',
     'pleaseSelectFeedbackType': '请选择反馈类型',
     'pleaseEnterFeedback': '请输入您的反馈',
@@ -833,6 +845,7 @@ class AppLocalizations {
       'logout': 'ログアウト',
       'profile': 'プロフィール',
       'saveYourPreferences': '設定を保存',
+       'signedInWithApple': 'Appleでサインインしました！',
       'signInToSave': 'いいねとブックマークを保存するには\nサインインしてください',
       'signIn': 'サインイン',
       'language': '言語',
@@ -894,6 +907,7 @@ class AppLocalizations {
     'ok': 'OK',
     'shortHeadline': '短い見出し',
     'shortHeadlinePlaceholder': '短い見出し...',
+     'signInWithApple': 'Appleでサインイン',
     'feedbackType': 'フィードバックタイプ',
     'select': '選択',
     'yourFeedback': 'あなたのフィードバック',
@@ -939,6 +953,7 @@ String get accessBookmarksOnAnyDevice => _localizedValues[locale.languageCode]?[
 String get signInNow => _localizedValues[locale.languageCode]?['signInNow'] ?? 'Sign In Now';
 String get saved => _localizedValues[locale.languageCode]?['saved'] ?? 'Saved';
 String get tapTheBookmarkIconToSaveArticles => _localizedValues[locale.languageCode]?['tapTheBookmarkIconToSaveArticles'] ?? 'Tap the bookmark icon to save articles';
+String get signedInWithApple =>_localizedValues[locale.languageCode]?['signedInWithApple'] ??'Signed in with Apple!';
 
   String get noBookmarksYet => _localizedValues[locale.languageCode]?['noBookmarksYet'] ?? 'No bookmarks yet';
 String get exploreArticles => _localizedValues[locale.languageCode]?['exploreArticles'] ?? 'Explore Articles';
@@ -984,6 +999,8 @@ String get search => _localizedValues[locale.languageCode]?['search'] ?? 'Search
   String get signInFailed => _localizedValues[locale.languageCode]?['signInFailed'] ?? 'Sign-in failed. Please try again.';
   String get signingIn => _localizedValues[locale.languageCode]?['signingIn'] ?? 'Signing in...';
   String get signInWithGoogle => _localizedValues[locale.languageCode]?['signInWithGoogle'] ?? 'Sign in with Google';
+  String get signInWithApple =>_localizedValues[locale.languageCode]?['signInWithApple'] ?? 'Sign in with Apple';
+
   String get changeEmail => _localizedValues[locale.languageCode]?['changeEmail'] ?? 'Change Email';
   String get signInWithPhone => _localizedValues[locale.languageCode]?['signInWithPhone'] ?? 'Sign in with Phone';
   String get signInWithEmail => _localizedValues[locale.languageCode]?['signInWithEmail'] ?? 'Sign in with Email';

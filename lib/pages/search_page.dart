@@ -782,7 +782,7 @@ class _SearchPageState extends State<SearchPage> {
                     }
 
                     return SizedBox(
-                      height: screenHeight * 0.19,
+                      height: screenHeight * 0.22,
                       child: PageView.builder(
                         controller: PageController(viewportFraction: 0.35),
                         itemCount: newsProvider.topics.length,

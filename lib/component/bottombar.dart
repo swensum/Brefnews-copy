@@ -16,10 +16,12 @@ class BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-      final localizations = AppLocalizations.of(context)!;
+    final localizations = AppLocalizations.of(context)!;
+    final screenSize = MediaQuery.of(context).size;
+    
     return Container(
-      height: 40,
-      decoration: BoxDecoration(
+      height: _calculateNavBarHeight(screenSize),
+      decoration: const BoxDecoration(
         color: Colors.black,
       ),
       child: Row(
@@ -31,6 +33,7 @@ class BottomNavBar extends StatelessWidget {
             index: 0,
             isActive: currentIndex == 0,
             label: localizations.search,
+            screenSize: screenSize,
           ),
           
           // Home Icon
@@ -39,6 +42,7 @@ class BottomNavBar extends StatelessWidget {
             index: 1,
             isActive: currentIndex == 1,
             label: localizations.home,
+            screenSize: screenSize,
           ),
           
           // Profile Icon or Profile Picture
@@ -46,10 +50,23 @@ class BottomNavBar extends StatelessWidget {
             index: 2,
             isActive: currentIndex == 2,
             label: localizations.profile,
+            screenSize: screenSize,
           ),
         ],
       ),
     );
+  }
+
+  double _calculateNavBarHeight(Size screenSize) {
+    // Adaptive height based on screen size and platform
+    if (screenSize.width > 1200) {
+      return 60; // iPad Pro landscape, desktop
+    } else if (screenSize.width > 600) {
+      return 50; // iPad, tablet
+    } else {
+      // For phones, use a percentage of screen height
+      return screenSize.height * 0.07; // 7% of screen height
+    }
   }
 
   Widget _buildNavItem({
@@ -57,93 +74,171 @@ class BottomNavBar extends StatelessWidget {
     required int index,
     required bool isActive,
     required String label,
+    required Size screenSize,
   }) {
+    final iconSize = _calculateIconSize(screenSize);
+    final padding = _calculateIconPadding(screenSize);
+    
     return GestureDetector(
       onTap: () => onTap(index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 26,
-            color: isActive ? Colors.white : Colors.grey,
-          ),
-        ],
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: padding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: iconSize,
+              color: isActive ? Colors.white : Colors.grey,
+            ),
+            SizedBox(height: _calculateLabelSpacing(screenSize)),
+            // Optional: Add label for larger screens
+            if (screenSize.width > 600)
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive ? Colors.white : Colors.grey,
+                  fontSize: _calculateFontSize(screenSize),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildProfileNavItem({
-  required int index,
-  required bool isActive,
-  required String label,
-}) {
-  return Consumer<AuthProvider>(
-    builder: (context, authProvider, child) {
-      final isSignedIn = authProvider.isSignedIn;
-      final userPhotoUrl = authProvider.userPhotoUrl;
+    required int index,
+    required bool isActive,
+    required String label,
+    required Size screenSize,
+  }) {
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        final isSignedIn = authProvider.isSignedIn;
+        final userPhotoUrl = authProvider.userPhotoUrl;
 
-      // Debug prints
-      print('🔐 BottomNavBar - isSignedIn: $isSignedIn');
-      print('🔐 BottomNavBar - userPhotoUrl: $userPhotoUrl');
-
-      return GestureDetector(
-        onTap: () => onTap(index),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isSignedIn && userPhotoUrl != null && userPhotoUrl.isNotEmpty)
-              // Show profile picture when signed in
-              Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                ),
-                child: ClipOval(
-                  child: Image.network(
-                    userPhotoUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      print('❌ Error loading profile image: $error');
-                      return Icon(
-                        Icons.person,
-                        size: 20,
+        return GestureDetector(
+          onTap: () => onTap(index),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: _calculateIconPadding(screenSize),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (isSignedIn && userPhotoUrl != null && userPhotoUrl.isNotEmpty)
+                  // Show profile picture when signed in
+                  Container(
+                    width: _calculateProfileImageSize(screenSize),
+                    height: _calculateProfileImageSize(screenSize),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
                         color: isActive ? Colors.white : Colors.grey,
-                      );
-                    },
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) {
-                        print('✅ Profile image loaded successfully');
-                        return child;
-                      }
-                      print('🔄 Loading profile image...');
-                      return Icon(
-                        Icons.person,
-                        size: 20,
-                        color: isActive ? Colors.white : Colors.grey,
-                      );
-                    },
+                        width: _calculateBorderWidth(screenSize),
+                      ),
+                    ),
+                    child: ClipOval(
+                      child: Image.network(
+                        userPhotoUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Icon(
+                            Icons.person,
+                            size: _calculateIconSize(screenSize),
+                            color: isActive ? Colors.white : Colors.grey,
+                          );
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Icon(
+                            Icons.person,
+                            size: _calculateIconSize(screenSize),
+                            color: isActive ? Colors.white : Colors.grey,
+                          );
+                        },
+                      ),
+                    ),
+                  )
+                else
+                  Icon(
+                    Icons.person,
+                    size: _calculateIconSize(screenSize),
+                    color: isActive ? Colors.white : Colors.grey,
                   ),
-                ),
-              )
-            else if (isSignedIn)
-              // Show person icon when signed in but no profile picture
-              Icon(
-                Icons.person,
-                size: 26,
-                color: isActive ? Colors.white : Colors.grey,
-              )
-            else
-              // Show regular person icon when not signed in
-              Icon(
-                Icons.person,
-                size: 26,
-                color: isActive ? Colors.white : Colors.grey,
-              ),
-          ],
-        ),
-      );
-    },
-  );
-}}
+                
+                SizedBox(height: _calculateLabelSpacing(screenSize)),
+                
+                // Optional: Add label for larger screens
+                if (screenSize.width > 600)
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isActive ? Colors.white : Colors.grey,
+                      fontSize: _calculateFontSize(screenSize),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Calculate icon size based on screen width
+  double _calculateIconSize(Size screenSize) {
+    if (screenSize.width > 1200) {
+      return 32; // Large screens
+    } else if (screenSize.width > 600) {
+      return 28; // Tablets
+    } else {
+      // For phones, use responsive calculation
+      return screenSize.width * 0.06; // 6% of screen width
+    }
+  }
+
+  // Calculate profile image size
+  double _calculateProfileImageSize(Size screenSize) {
+    final iconSize = _calculateIconSize(screenSize);
+    return iconSize * 1.2; // Slightly larger than icons
+  }
+
+  // Calculate icon padding for better touch targets
+  double _calculateIconPadding(Size screenSize) {
+    if (screenSize.width > 1200) {
+      return 32;
+    } else if (screenSize.width > 600) {
+      return 24;
+    } else {
+      return screenSize.width * 0.05; // 5% of screen width
+    }
+  }
+
+  // Calculate spacing between icon and label
+  double _calculateLabelSpacing(Size screenSize) {
+    if (screenSize.width > 600) {
+      return 4;
+    }
+    return 0;
+  }
+
+  // Calculate font size for labels
+  double _calculateFontSize(Size screenSize) {
+    if (screenSize.width > 1200) {
+      return 14;
+    } else if (screenSize.width > 600) {
+      return 12;
+    } else {
+      return 10;
+    }
+  }
+
+  // Calculate border width for profile image
+  double _calculateBorderWidth(Size screenSize) {
+    return screenSize.width > 600 ? 2.0 : 1.5;
+  }
+}
